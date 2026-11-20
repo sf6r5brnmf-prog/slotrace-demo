@@ -1,0 +1,53 @@
+/* «Mi coche»: pantalla de teléfono, un solo piloto, legible a la distancia del brazo. */
+.mc-page{--team:#d5ff42;-webkit-text-size-adjust:100%;overscroll-behavior-y:none}
+.mc-page main{max-width:560px;padding:max(10px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(18px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}
+.mc-header{border-top:5px solid var(--team);padding-top:10px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.mc-brand{display:flex;align-items:center;gap:10px}.mc-brand .eyebrow{margin:0;font-size:10px;letter-spacing:.14em}
+.mc-menu{color:var(--muted);font-size:12px;text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:4px 8px}
+.mc-chips{display:flex;gap:6px;flex-wrap:wrap}.mc-chips .chip,.mc-chips .chip-button{padding:6px 10px;font-size:12px}
+.mc-offline{margin:10px 0;padding:12px 14px;border:2px solid #ff8179;border-radius:12px;background:#2c1414;color:#ffd2ce;font-size:15px;line-height:1.4}.mc-offline strong{display:block;font-size:18px;color:#ff8179}.mc-offline p{margin:4px 0 0}
+.mc-stale .mc-dash,.mc-stale .mc-who{opacity:.45;filter:grayscale(.6)}
+/* elegir piloto */
+.mc-choose h1{font-size:40px;margin:18px 0 6px}.mc-lead{color:var(--muted);font-size:17px;line-height:1.45;margin:0 0 14px}
+.mc-note{background:#2a2312;border:1px solid #ffd47980;color:#ffe3a3;border-radius:10px;padding:10px 12px;font-size:15px}
+.mc-pilots{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mc-pilot{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 8px 14px;border:2px solid var(--line);border-top:6px solid var(--team);border-radius:14px;background:radial-gradient(120% 80% at 50% 0%,#1c222c,#11151b);color:var(--text);font:inherit;cursor:pointer;min-height:44px}
+.mc-pilot img{width:100%;max-width:150px;aspect-ratio:5/6;object-fit:contain;background:#0b0d11;border-radius:10px}
+.mc-pilot strong{font-size:22px;letter-spacing:-.02em;overflow-wrap:anywhere}.mc-pilot small{color:var(--team);font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+.mc-pilot.current{border-color:var(--lime)}
+/* tablero */
+.mc-who{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;margin-top:12px}
+.mc-avatar{width:84px;height:100px;object-fit:contain;background:#0b0d11;border-radius:12px;border:3px solid var(--team);box-shadow:0 0 22px color-mix(in srgb,var(--team) 35%,transparent)}
+.mc-name{min-width:0;display:flex;flex-direction:column;gap:3px}.mc-name strong{font-size:32px;line-height:1.05;letter-spacing:-.03em;overflow-wrap:anywhere}.mc-name span{color:var(--team);font-weight:800;font-size:15px}
+.mc-change{align-self:flex-start;margin-top:4px;padding:6px 10px;font-size:13px;background:transparent;color:var(--muted)}
+.mc-pos{text-align:center;border:2px solid var(--line);border-radius:14px;padding:6px 12px;min-width:84px;background:#0e1116}.mc-pos strong{display:block;font:900 44px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--lime)}.mc-pos span{font-size:12px;color:var(--muted);font-weight:700}
+.mc-phase{margin:12px 0 8px;padding:10px 12px;border-radius:12px;border-left:6px solid var(--team);background:linear-gradient(110deg,#1b2230,#12161d);display:flex;flex-direction:column;gap:2px}
+.mc-session{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:800}.mc-phase strong{font-size:22px;letter-spacing:-.02em}.mc-stage{font-size:15px;color:var(--lime);font-weight:700}
+.mc-phase.go{border-left-color:#3dff4a}.mc-phase.lights{border-left-color:#ff2a1e}
+.mc-wait{margin:10px 0;padding:18px 16px;border:2px dashed var(--line);border-radius:14px;text-align:center;background:#12161d}.mc-wait strong{display:block;font-size:28px;letter-spacing:-.03em}.mc-wait p{color:var(--muted);font-size:17px;line-height:1.45;margin:8px 0 0}
+.mc-dash{border:1px solid var(--line);border-top:5px solid var(--team);border-radius:16px;padding:10px;background:radial-gradient(120% 80% at 50% 0%,#1c222c,#0d1015)}
+.mc-gauge{display:block;width:100%;height:auto;aspect-ratio:2/1;max-height:300px}
+.mc-alerts{display:flex;flex-direction:column;gap:6px}.mc-alert{padding:10px 12px;border-radius:10px;font-weight:900;font-size:19px;text-align:center}
+.mc-alert.fuel{background:#3a1010;color:#ff6b5e;border:2px solid #ff3b3b;animation:mcblink 1s steps(2) infinite}.mc-alert.bad{background:#3a1010;color:#ff8a84;border:2px solid #ff5a4d}.mc-alert.fin{background:#20300f;color:var(--lime);border:2px solid var(--lime)}.mc-alert.info{background:#202630;color:var(--text);border:1px solid var(--line);font-weight:700;font-size:16px}
+@keyframes mcblink{50%{opacity:.55}}
+.mc-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px}
+.mc-stat{background:#0b0e13;border:1px solid #262d38;border-radius:12px;padding:8px 6px;text-align:center;min-width:0}.mc-stat span{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:800}
+.mc-stat strong{display:block;font:900 clamp(17px,5.3vw,28px)/1.15 ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums;white-space:nowrap;letter-spacing:-.03em}.mc-stat strong.low{color:#ff5a4d}.mc-laps strong{color:var(--lime)}.mc-stat .gkmh{display:block;margin-top:3px;font:700 12px system-ui,sans-serif;color:var(--muted);letter-spacing:0;text-transform:none;line-height:1.2}.mc-stat .gkmh[hidden]{display:none}
+.mc-events{display:flex;flex-direction:column;gap:4px;margin-top:8px}.mc-events div{font-size:15px;color:var(--muted)}
+.mc-laplist{margin-top:10px;color:var(--muted)}.mc-laplist summary{font-weight:700;cursor:pointer;padding:6px 0}.mc-laplist table{width:100%;border-collapse:collapse;font-size:16px}.mc-laplist td,.mc-laplist th{padding:5px;text-align:right;border-bottom:1px solid #222833}.mc-laplist td:first-child,.mc-laplist th:first-child{text-align:left}
+.mc-foot{color:var(--muted);font-size:13px;text-align:center;margin:12px 0 0}
+.mc-page .lights-box strong{font-size:clamp(30px,9vw,60px)}.mc-page .gp-lights{padding:16px 18px;gap:12px}.mc-page .gp-lights i{width:clamp(64px,22vw,120px);height:clamp(64px,22vw,120px)}
+@media(max-width:380px){.mc-name strong{font-size:26px}.mc-avatar{width:68px;height:82px}.mc-pos{min-width:70px}.mc-pos strong{font-size:36px}.mc-phase strong{font-size:19px}.mc-pilot strong{font-size:19px}}
+@media(min-width:700px){.mc-page main{max-width:640px}}
+.mc-phase.paro{border-left-color:#ff2a1e;background:linear-gradient(110deg,#5a0c11,#2a0b0e)}.mc-phase.paro strong{color:#fff}
+
+.mc-alert.warn{background:#2e2410;color:#ffbe5c;border:2px solid #ffb347;font-size:16px}
+.mc-name .pide{font-size:14px;padding:2px 9px;color:#7d8796}.mc-name .pide.on{color:#0b0d11}
+
+.mc-pits{margin:8px 0 0;padding:8px 12px;border-radius:8px;background:#ff9f4318;color:#ffb25a;font-weight:800;font-size:15px}
+.mc-pits[hidden]{display:none}
+.mc-alert.pits{background:#ff9f4318;color:#ffb25a}
+/* Vida de llanta en «Mi coche»: el aviso grande ya sale arriba (CAMBIA LLANTAS / ENTRA A PITS). */
+.mc-tire{margin-top:8px;border:1px solid #262d38;border-radius:12px;background:#0b0e13}
+.mc-tire .tire-warn{display:none!important}
+.mc-stat strong.mid{color:#ffc93c}.mc-stat strong.ok{color:#3ddc6a}

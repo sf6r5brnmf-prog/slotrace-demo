@@ -1,0 +1,129 @@
+/* Gran Premio · tablero analógico estilo racing */
+.gp-page main{max-width:1500px}
+.gp-header{align-items:flex-end}
+.gp-status{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.chip,.chip-button,.link-button{border:1px solid var(--line);border-radius:22px;padding:9px 14px;font-size:13px;font-weight:700;background:#171b22;color:var(--text);text-decoration:none;display:inline-block}
+.chip.ok{color:var(--lime)}.chip.bad{color:#ff8179}.chip-button.on{color:var(--lime);border-color:var(--lime)}
+.link-button{border-radius:9px;padding:11px 16px;font-size:15px}.link-button.primary{background:var(--lime);color:#11150b;border-color:var(--lime)}
+.danger{color:#ff8a84}
+.gp-tabs{display:flex;gap:8px;margin:26px 0 8px;flex-wrap:wrap}.tab{border-radius:9px 9px 0 0;text-decoration:none;color:var(--muted);border:1px solid var(--line);padding:11px 16px;font:700 15px system-ui;background:#141820}.tab.active{color:#11150b;background:var(--lime);border-color:var(--lime)}
+.tab-body{border-top:1px solid var(--line);padding-top:8px}
+.gp-h2{font-size:24px;letter-spacing:-.03em;margin:26px 0 12px}
+.presets{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.preset{text-align:left;display:flex;flex-direction:column;gap:6px;padding:18px;border-radius:12px;background:#171b22}.preset strong{font-size:22px}.preset small{color:var(--muted);font-weight:500}.preset.active{border:2px solid var(--lime);background:linear-gradient(135deg,#252d17,#141a10)}
+.throttle-row{display:flex;gap:8px;margin:10px 0 14px;flex-wrap:wrap}.thr{position:relative;width:62px;height:34px;border:1px solid var(--line);border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#11151b}.thr b{position:relative;z-index:1}.thr i{position:absolute;left:0;bottom:0;top:0;background:#d5ff4255;width:0;transition:width .1s}.thr.none{opacity:.35}.thr.hot{border-color:var(--lime);color:var(--lime)}
+.pilot-pick{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.pick{display:grid;grid-template-columns:auto 56px 1fr auto;align-items:center;gap:12px;padding:12px;border:1px solid var(--line);border-top:4px solid var(--team);border-radius:12px;background:var(--panel);cursor:pointer;opacity:.6}.pick.on{opacity:1}
+.pick input{width:22px;height:22px;accent-color:var(--lime)}.pick img{width:56px;height:68px;object-fit:contain;background:#0b0d11;border-radius:6px}.pick-name strong{display:block;font-size:20px}.pick-name small{color:var(--muted)}
+.pick select,.cfg-row select,.cfg-row input[type=number]{font:16px system-ui;background:#0b0d11;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:9px}
+.setup-actions,.config-actions{display:flex;gap:12px;align-items:center;margin:24px 0;flex-wrap:wrap}.big{font-size:20px;padding:16px 26px}
+.config-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:18px}
+.cfg-box{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:var(--panel);margin:0;min-width:0}.cfg-box legend{font-weight:900;color:var(--lime);padding:0 6px;font-size:14px;text-transform:uppercase;letter-spacing:.08em}
+.cfg-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #222833;font-size:14px}.cfg-row:last-child{border-bottom:0}.cfg-row input[type=number]{width:96px;text-align:right}.cfg-row select{max-width:52%}
+.cfg-bool{justify-content:flex-start}.cfg-bool input{width:20px;height:20px;accent-color:var(--lime);flex-shrink:0}
+.sfx-test{display:flex;gap:8px;flex-wrap:wrap}.sfx-test button{text-transform:capitalize}
+/* carrera */
+.stage-bar{margin-top:22px}.stepper{display:flex;gap:6px;list-style:none;padding:0;margin:0}.step{flex:1;border:1px solid var(--line);border-radius:10px;padding:10px 14px;background:#141820;display:flex;justify-content:space-between;align-items:center;gap:6px}.step b{font-size:13px;letter-spacing:.12em}.step small{color:var(--muted)}.step.current{border-color:var(--lime);background:linear-gradient(135deg,#252d17,#141a10)}.step.current b{color:var(--lime)}.step.done{opacity:.65}.step.done b::before{content:'✓ '}
+.race-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-top:18px;flex-wrap:wrap}.race-head h2{font-size:clamp(28px,3.6vw,48px);letter-spacing:-.04em;margin:0 0 6px}.race-head .eyebrow{margin-bottom:6px}
+.clock{text-align:right;border:1px solid var(--line);border-radius:12px;padding:10px 18px;background:#0e1116;min-width:190px}.clock span{display:block;font-size:11px;letter-spacing:.16em;color:var(--muted);font-weight:800}.clock strong{font:900 clamp(34px,4vw,56px)/1.05 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--lime);font-variant-numeric:tabular-nums}.clock strong.low{color:#ff5a4d}
+.race-controls{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 6px}
+.ticker{display:flex;flex-direction:column;gap:4px;min-height:8px;margin:6px 0 10px}.tick{font-size:14px;color:var(--muted);animation:tin .4s ease}.tick-best,.tick-winner{color:var(--lime);font-weight:800}.tick-false_start{color:#ff8a84;font-weight:800}@keyframes tin{from{opacity:0;transform:translateY(-4px)}}
+.dash{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.dash.few{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(min-width:1100px){.dash.few{grid-template-columns:repeat(4,minmax(0,1fr))}.dash.few .gcanvas{height:170px}}
+.gcard{border:1px solid var(--line);border-top:5px solid var(--team);border-radius:14px;background:radial-gradient(120% 80% at 50% 0%,#1c222c,#11151b);overflow:hidden;min-width:0;transition:opacity .3s,box-shadow .3s}
+.gcard.active{box-shadow:0 0 0 1px #d5ff4266,0 8px 30px #0008}.gcard.dim{opacity:.72}
+.gtop{display:grid;grid-template-columns:auto 46px 1fr auto;align-items:center;gap:10px;padding:10px 14px}
+.gpos{font:900 30px/1 ui-monospace,Menlo,monospace;color:var(--team);min-width:48px}
+.gav{width:46px;height:56px;object-fit:contain;border-radius:6px;background:#0b0d11}
+.gname{min-width:0}.gname strong{display:block;font-size:21px;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gname small{color:var(--muted);font-size:12px}
+.gbadge{font-size:11px;font-weight:900;padding:5px 8px;border-radius:5px;background:#ffffff14;color:var(--muted);white-space:nowrap}.gbadge.on{background:#d5ff4222;color:var(--lime)}.gbadge.bad{background:#ff655e26;color:#ff8982}.gbadge.fin{background:#ffffff;color:#000}
+.gcanvas{display:block;width:100%;height:190px}
+.gstats{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid #262d38}.gstats div{padding:9px 12px;border-right:1px solid #262d38}.gstats div:last-child{border-right:0}.gstats span{display:block;font-size:10px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}.gstats strong{font:800 19px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}.gstats .gkmh{display:block;margin-top:2px;font:700 11px system-ui,sans-serif;color:var(--muted);letter-spacing:0;text-transform:none;line-height:1.2}.gstats .gkmh[hidden]{display:none}
+.tables{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:22px}.tbox{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--panel);overflow:auto}.tbox h3{margin:0 0 8px;font-size:15px;color:var(--lime);letter-spacing:.04em}.tbox table{width:100%;border-collapse:collapse;font-size:14px}.tbox th,.tbox td{padding:6px 5px;border-bottom:1px solid #262d38;text-align:right;white-space:nowrap}.tbox th:nth-child(2),.tbox td:nth-child(2){text-align:left}.tbox th{color:var(--muted);font-size:12px}
+.lights-overlay{position:fixed;inset:0;background:#000c;display:flex;align-items:center;justify-content:center;z-index:30}.lights-box{text-align:center}.lights-box strong{font-size:clamp(28px,5vw,60px);letter-spacing:-.03em}
+.gp-lights{display:flex;gap:clamp(14px,3vw,34px);justify-content:center;margin:24px 0;padding:22px 30px;background:#111;border-radius:22px;border:2px solid #333}.gp-lights i{width:clamp(60px,11vw,130px);height:clamp(60px,11vw,130px);border-radius:50%;background:#2a0b0b;border:4px solid #000;box-shadow:inset 0 0 20px #000}.gp-lights i.red{background:radial-gradient(circle at 40% 35%,#ff9c8f,#ff1d12 55%,#8d0700);box-shadow:0 0 40px #ff2a1e}.gp-lights i.green{background:radial-gradient(circle at 40% 35%,#d9ffb0,#3dff4a 55%,#0a7a12);box-shadow:0 0 40px #3dff4a}
+.podium{display:flex;justify-content:center;align-items:flex-end;gap:16px;margin:30px 0}.pod{border:1px solid var(--line);border-top:6px solid var(--team);border-radius:14px;background:var(--panel);padding:16px;text-align:center;width:min(30%,260px);display:flex;flex-direction:column;gap:8px;align-items:center}.pod img{width:100%;max-width:200px;aspect-ratio:5/6;object-fit:contain}.pod strong{font-size:26px}.pod span{color:var(--muted);font-size:14px}.pod1{padding-bottom:46px;border-color:#ffd54a}.pod2{padding-bottom:24px}
+@media(max-width:1000px){.dash,.dash.few{grid-template-columns:repeat(2,minmax(0,1fr))}.tables,.config-grid{grid-template-columns:1fr 1fr}.presets{grid-template-columns:1fr 1fr}.pilot-pick{grid-template-columns:1fr 1fr}}
+@media(max-width:640px){main{padding:16px}.dash,.dash.few{grid-template-columns:1fr}.gcanvas{height:170px}.tables,.config-grid,.pilot-pick{grid-template-columns:1fr}.stepper{flex-direction:column}.race-controls button,.race-controls a{flex:1 1 45%}.clock{min-width:0;width:100%;text-align:left}.gp-status{width:100%}.pick{grid-template-columns:auto 48px 1fr}.pick select{grid-column:1/-1}.podium{gap:8px}.pod{padding:10px}.pod strong{font-size:18px}}
+.throttle-wrap{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+@media(max-width:640px){.racing .gp-header h1{font-size:34px;margin-bottom:4px}.racing #gpSubtitle{display:none}.racing .gp-header .eyebrow{margin-bottom:4px}.racing .gp-status{gap:6px}.racing .chip,.racing .chip-button,.racing .gp-status .link-button{padding:6px 10px;font-size:12px}.racing .stepper{flex-direction:row}.racing .step{padding:7px 8px;flex-direction:column;align-items:flex-start;gap:2px}.racing .step b{font-size:10px;letter-spacing:.06em}.racing .race-head{margin-top:10px}.racing .race-head h2{font-size:24px}.racing .clock{padding:6px 12px}.racing .clock strong{font-size:30px}.racing .race-controls button,.racing .race-controls a{padding:9px 10px;font-size:13px}.racing #runHint{margin:0}}
+/* Botón Empezar (Gran Premio, Práctica y Carrera) y franja de "listos" antes del semáforo. */
+.btn-empezar{font-size:clamp(22px,3vw,30px);font-weight:900;letter-spacing:.01em;padding:16px 46px;border-radius:14px;box-shadow:0 0 0 3px #d5ff4233,0 10px 30px #d5ff4238;cursor:pointer}
+.btn-empezar:hover{filter:brightness(1.06)}.btn-empezar:disabled{opacity:.6;cursor:wait}
+.ready-bar{display:flex;align-items:center;justify-content:space-between;gap:18px 28px;flex-wrap:wrap;margin:22px 0 4px;padding:20px 24px;border:2px solid var(--lime);border-radius:16px;background:radial-gradient(120% 140% at 0% 0%,#232b12,#12160d)}
+.ready-bar strong{font-size:clamp(24px,3vw,32px);letter-spacing:-.03em}.ready-bar p{margin:4px 0 0;color:var(--muted);font-size:14px;line-height:1.45;max-width:640px}.ready-bar .eyebrow{color:var(--lime);margin:0 0 4px;font-size:12px}
+@media(max-width:640px){.ready-bar{padding:16px}.ready-bar .btn-empezar{width:100%}}
+
+/* Avisos al arrancar el servidor (archivos recuperados tras un apagón, etc.) */
+.avisos{margin:14px 0;padding:14px 18px;border:1px solid #ffd47980;border-radius:12px;background:#2a2312;color:#ffe3a3;font-size:15px;line-height:1.5}.avisos[hidden]{display:none}.avisos strong{display:block;color:#ffd479;margin-bottom:4px}.avisos p{margin:4px 0}.avisos button{margin-top:8px;font:inherit;font-weight:700;padding:8px 14px;border-radius:8px;border:1px solid #ffd479;background:transparent;color:#ffd479;cursor:pointer}
+/* Bandera roja (PARO) — paro.js */
+.paro-fab{position:fixed;right:22px;bottom:22px;z-index:25;background:#e0161f;border:3px solid #ff8a84;color:#fff;font:950 clamp(20px,2.4vw,30px)/1 system-ui;letter-spacing:.04em;padding:20px 30px;border-radius:999px;box-shadow:0 0 0 6px #e0161f33,0 12px 34px #000a;cursor:pointer}
+.paro-fab:hover{filter:brightness(1.12);border-color:#fff}.paro-fab:disabled{opacity:.6;cursor:wait}
+.paro-overlay{position:fixed;inset:0;z-index:28;display:flex;align-items:center;justify-content:center;padding:20px;background:repeating-linear-gradient(135deg,#8f0d14ee,#8f0d14ee 34px,#a3121aee 34px,#a3121aee 68px)}
+.paro-box{text-align:center;max-width:820px;background:#1a0608e6;border:3px solid #ff5a55;border-radius:22px;padding:clamp(22px,4vw,46px);box-shadow:0 20px 80px #000c}
+.paro-flag{font-size:clamp(46px,7vw,84px);line-height:1;animation:paroWave 1.2s ease-in-out infinite alternate}
+@keyframes paroWave{from{transform:rotate(-8deg)}to{transform:rotate(8deg)}}
+.paro-eyebrow{color:#ffb3ad;font-weight:900;letter-spacing:.3em;margin:14px 0 0;font-size:clamp(14px,1.6vw,20px)}
+.paro-title{display:block;font-size:clamp(80px,15vw,190px);font-weight:950;letter-spacing:-.04em;line-height:.95;color:#fff;text-shadow:0 0 40px #ff3b35aa}
+.paro-label{color:#ffd9d6;font-weight:800;margin:6px 0 0;font-size:18px}
+.paro-sub{color:#ffe3e1;font-size:clamp(16px,1.8vw,21px);line-height:1.45;margin:14px auto 6px;max-width:640px}
+.paro-clock{font:900 clamp(22px,3vw,34px) ui-monospace,Menlo,monospace;color:#fff;margin:10px 0 18px}
+.paro-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.paro-resume{background:var(--lime);color:#11150b;border:0;font-size:clamp(20px,2.4vw,28px);font-weight:950;padding:16px 34px;border-radius:14px;box-shadow:0 0 0 3px #d5ff4244}
+.paro-resume.small{font-size:15px;padding:8px 16px}.paro-look{background:#2a0b0e;border-color:#ff8a84;color:#ffe3e1}.paro-look.small{font-size:13px;padding:7px 12px}
+.paro-error{color:#fff;font-weight:800;min-height:20px;margin:12px 0 0}
+.paro-bar{position:fixed;left:0;right:0;top:0;z-index:27;display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;padding:10px 16px;background:#c0121a;color:#fff;box-shadow:0 6px 24px #000a}
+.paro-bar strong{font-size:18px;letter-spacing:.04em}.paro-bar-clock{font:800 18px ui-monospace,Menlo,monospace}
+body.paro-on{box-shadow:inset 0 0 0 8px #e0161f}
+body.paro-on .gcard{filter:saturate(.55)}
+@media(max-width:640px){.paro-fab{right:12px;bottom:12px;padding:16px 22px}}
+/* Bandera amarilla del piloto (mismo PARO, letrero amarillo) y descalificado */
+.paro-overlay.yellow{background:repeating-linear-gradient(135deg,#a88400ee,#a88400ee 34px,#c79d00ee 34px,#c79d00ee 68px)}
+.paro-overlay.yellow .paro-box{background:#1d1702e8;border-color:#ffe23b}.paro-overlay.yellow .paro-eyebrow{color:#ffe98a}
+.paro-overlay.yellow .paro-title{text-shadow:0 0 40px #ffd000aa}
+.paro-by{color:#ffe23b;font-weight:950;font-size:clamp(22px,3vw,36px);margin:8px 0 0}
+.paro-bar.yellow{background:#c79d00;color:#141000}
+body.paro-on.paro-yellow{box-shadow:inset 0 0 0 8px #ffd000}
+.gflags{display:inline-block;margin-left:6px;font-size:13px;font-weight:900;color:#ffe23b;white-space:nowrap}
+.gflags.full{color:#ff9f43}.gflags.dsq{color:#fff;background:#b3121a;border-radius:6px;padding:1px 6px}
+.gcard.dsq{filter:grayscale(.85);opacity:.72}.gcard.dsq .gpos{color:#ff5a4d}
+.gbadge.dsq{background:#b3121a;color:#fff}
+.tick-yellow_flag{color:#ffe23b}.tick-dsq{color:#ff5a4d}
+.race-clock{font:900 22px ui-monospace,Menlo,monospace;color:var(--lime);border:1px solid var(--line);border-radius:10px;padding:8px 14px}.race-clock.stopped{color:#ff8a84;border-color:#ff5a55}
+.clock strong.paro{color:#ff5a4d}
+
+/* Vueltas sospechosas (más cortas que la vuelta mínima): no cuentan, se ven para revisarlas. */
+.gsus{margin:0;padding:7px 12px;border-top:1px solid #262d38;background:#ffb3470f;color:#ffbe5c;font:700 12px/1.35 ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+.tbox.sus-box h3{color:#ffbe5c}.tbox.sus-box td{color:#ffd9a0}
+.tick-suspicious{color:#ffbe5c}
+.lap-min-label{display:block;margin-top:14px}.lap-min-row{display:flex;align-items:center;gap:8px}.lap-min-row input{width:7em;font:700 18px ui-monospace,Menlo,monospace;background:#0b0d11;border:1px solid var(--line,#2a313c);border-radius:8px;color:var(--text,#edf2f7);padding:9px 11px}.lap-min-row span{color:var(--muted,#9aa4b2)}
+/* ⇄ «pide cambio»: el botón de cambio de carril del mando está apretado (no confirma que el coche cambió). */
+.pide{display:inline-flex;align-items:center;gap:3px;margin-top:2px;padding:1px 6px;border-radius:9px;font:800 11px/1.4 system-ui;color:#7d8796;background:#ffffff0d;width:max-content;transition:background .15s,color .15s}
+.pide.sin{display:none}
+.pide.on{color:#0b0d11;background:#ffd23f;box-shadow:0 0 10px #ffd23f88;transition:none}
+.pide.on::after{content:' pide cambio';font-weight:900}
+
+/* Tiempo en pits */
+.gbadge.pits{background:#ff9f4328;color:#ffb25a}
+.gcard.en-pits{box-shadow:0 0 0 1px #ff9f4366,0 8px 24px #0008}
+.gpits{margin:0;padding:8px 14px 10px;font-size:13px;font-weight:700;color:#ffb25a;border-top:1px solid #262d38}
+.gpits:empty,.gpits[hidden]{display:none}
+/* Vida de llanta (= nivel D6 de la Pit Box en %): verde >50 %, amarilla 20–50 %, roja <20 %. */
+.gtire{padding:8px 14px 10px;border-top:1px solid #262d38;--tire:#6b7480}
+.gtire[hidden]{display:none}
+.gtire[data-nivel="verde"]{--tire:#3ddc6a}.gtire[data-nivel="amarilla"]{--tire:#ffc93c}.gtire[data-nivel="roja"]{--tire:#ff3b3b}
+.gtire .tire-head{display:flex;align-items:center;gap:8px;min-width:0}
+.gtire .tire-icon{width:22px;height:22px;flex:0 0 22px}.gtire .tire-rim{fill:var(--tire)}
+.gtire .tire-label{font-size:10px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;font-weight:800;white-space:nowrap}
+.gtire .tire-name{font-style:normal;font-size:11px;font-weight:800;color:#cfd6df;background:#202630;border:1px solid #2f3746;border-radius:999px;padding:1px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.gtire .tire-pct{margin-left:auto;font:900 20px/1 ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums;color:var(--tire)}
+.gtire .tire-bar{height:8px;margin-top:6px;border-radius:999px;background:#0b0e13;border:1px solid #262d38;overflow:hidden}
+.gtire .tire-bar i{display:block;height:100%;width:0;background:var(--tire);border-radius:999px;transition:width .6s ease,background .3s}
+.gtire .tire-set{display:block;margin-top:5px;font-size:12px;font-weight:700;color:#aeb7c4;font-variant-numeric:tabular-nums}
+.gtire .tire-set:empty{display:none}
+.gtire .tire-warn{margin-top:7px;padding:6px 8px;border-radius:9px;background:#3a1010;border:2px solid #ff3b3b;color:#ff6b5e;font-weight:900;font-size:13px;letter-spacing:.04em;text-align:center;animation:tireblink 1s steps(2) infinite}
+.gtire .tire-warn[hidden]{display:none}
+.gcard.tire-low{box-shadow:0 0 0 2px #ff3b3b66 inset}
+@keyframes tireblink{50%{opacity:.45}}
+@media (prefers-reduced-motion:reduce){.gtire .tire-warn{animation:none}}
+.cfg-row input[type=text]{font:16px system-ui;background:#0b0d11;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:9px;width:150px;max-width:52%}

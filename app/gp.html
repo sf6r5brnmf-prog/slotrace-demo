@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="es-MX"><head><script src="demo-shim.js?v=202611200513"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Gran Premio · Puto el último</title><link rel="stylesheet" href="style.css?v=202611200513"><link rel="stylesheet" href="gp.css?v=202611200513"><script src="avisos.js?v=202611200513" defer></script><script src="gatillo.js?v=202611200513" defer></script><script src="gauges.js?v=202611200513" defer></script><script src="lights.js?v=202611200513" defer></script><script src="paro.js?v=202611200513" defer></script><script src="explosion.js?v=202611200513" defer></script><script src="gp.js?v=202611200513" defer></script></head>
+<body class="gp-page"><main>
+<header class="gp-header"><div><p class="eyebrow">SLOTRACE / GRAN PREMIO</p><h1>Gran Premio</h1><p class="subtitle" id="gpSubtitle">Qualy · Eliminatorias · Final. Sin features: pura carrera.</p></div>
+<div class="gp-status"><a class="link-button" href="index.html">← Menú</a><a class="link-button" href="micoche.html">📱 Mi coche</a><span id="scxStatus" class="chip">SCX…</span><button type="button" id="soundToggle" class="chip-button">🔇 Activar sonido aquí</button><span id="connection" class="chip">Conectando…</span></div></header><div id="avisos" class="avisos" role="status" hidden></div>
+
+<section id="setupScreen" hidden>
+  <nav class="gp-tabs" role="tablist"><button type="button" class="tab active" data-tab="newTab">Nuevo Gran Premio</button><button type="button" class="tab" data-tab="configTab">Configuración</button><a class="tab" href="scx.html">Datos SCX (debug)</a></nav>
+  <div id="newTab" class="tab-body">
+    <h2 class="gp-h2">1 · Formato</h2>
+    <div class="presets" id="presetButtons"></div>
+    <p class="muted" id="formatSummary"></p>
+    <h2 class="gp-h2">2 · Pilotos y coches</h2>
+    <p class="muted">Elige de 2 a 6 pilotos. Asigna a cada uno el número de su coche (el mando 1 a 6 de la Pit Box). Aprieta un gatillo: su número se ilumina.</p>
+    <div class="throttle-wrap"><span class="muted">Mandos:</span><div id="throttleRow" class="throttle-row"></div></div>
+    <div id="pilotPick" class="pilot-pick"></div>
+    <p id="setupError" class="error" role="alert"></p>
+    <div class="setup-actions"><button type="button" class="primary big" id="createGp">Arrancar Gran Premio →</button></div>
+  </div>
+  <div id="configTab" class="tab-body" hidden>
+    <form id="configForm" class="config-grid"></form>
+    <div class="config-actions"><button type="button" class="primary" id="saveConfig">Guardar configuración</button><button type="button" id="resetConfig">Valores de fábrica</button><span id="configMsg" class="muted" role="status"></span></div>
+    <h2 class="gp-h2">Probar sonidos</h2><div id="sfxTest" class="sfx-test"></div>
+  </div>
+</section>
+
+<section id="raceScreen" hidden>
+  <div class="stage-bar"><ol id="stepper" class="stepper"></ol></div>
+  <div class="race-head">
+    <div><p class="eyebrow" id="runEyebrow"></p><h2 id="runTitle"></h2><p id="runHint" class="muted"></p></div>
+    <div class="clock"><span id="clockLabel">TIEMPO</span><strong id="clock">--:--</strong></div>
+  </div>
+  <div class="race-controls" id="raceControls">
+    <button type="button" class="primary big btn-empezar" id="btnStart">Empezar</button>
+    <button type="button" id="btnEnd">■ Terminar ahora</button>
+    <button type="button" id="btnRepeat">↺ Repetir</button>
+    <button type="button" id="btnSkip">Saltar piloto</button>
+    <button type="button" class="primary" id="btnNext">Siguiente →</button>
+    <a class="link-button" id="btnCsv" href="/api/gp/resultados.csv">⬇ Exportar CSV</a>
+    <button type="button" class="danger" id="btnCancel">Cancelar GP</button>
+  </div>
+  <p id="gpNotice" class="live-notice" role="status"></p><p id="gpError" class="error" role="alert"></p>
+  <div id="ticker" class="ticker" aria-live="polite"></div>
+  <div id="dash" class="dash"></div>
+  <div id="tables" class="tables"></div>
+</section>
+
+<section id="doneScreen" hidden>
+  <div class="podium" id="podium"></div>
+  <div id="doneTables" class="tables"></div>
+  <div class="setup-actions"><a class="link-button primary" href="/api/gp/resultados.csv">⬇ Exportar resultados (CSV)</a><button type="button" id="btnClose">Nuevo Gran Premio</button></div>
+</section>
+</main>
+<div id="lights" class="lights-overlay" hidden><div class="lights-box"><p class="eyebrow" id="lightsLabel"></p><div class="gp-lights"><i></i><i></i><i></i></div><strong id="lightsText">Pilotos, a sus lugares</strong></div></div>
+<div id="toast" role="status" aria-live="polite"></div>
+</body></html>

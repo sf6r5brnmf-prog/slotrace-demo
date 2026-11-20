@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="es-MX"><head><script src="demo-shim.js?v=202611200513"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b0d11"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Mi coche"><meta name="format-detection" content="telephone=no"><link rel="apple-touch-icon" href="micoche-icon.png"><link rel="icon" href="micoche-icon.png"><title>Mi coche · Puto el último</title><link rel="stylesheet" href="style.css?v=202611200513"><link rel="stylesheet" href="gp.css?v=202611200513"><link rel="stylesheet" href="micoche.css?v=202611200513"><script src="avisos.js?v=202611200513" defer></script><script src="gatillo.js?v=202611200513" defer></script><script src="gauges.js?v=202611200513" defer></script><script src="lights.js?v=202611200513" defer></script><script src="paro.js?v=202611200513" defer></script><script src="micoche.js?v=202611200513" defer></script></head>
+<body class="gp-page mc-page"><main>
+<header class="mc-header"><div class="mc-brand"><p class="eyebrow">PUTO EL ÚLTIMO / MI COCHE</p><a class="mc-menu" href="index.html">Menú</a></div>
+<div class="mc-chips"><span id="connection" class="chip">Conectando con la Mac…</span><button type="button" id="soundToggle" class="chip-button">🔇 Activar sonido aquí</button></div></header>
+<div id="offline" class="mc-offline" role="alert" hidden><strong id="offlineTitle">No hay conexión con la Mac</strong><p id="offlineText"></p></div>
+<div id="avisos" class="avisos" role="status" hidden></div>
+
+<section id="chooseScreen" class="mc-choose" hidden aria-label="Elige tu piloto">
+  <h1>¿Quién eres?</h1>
+  <p class="mc-lead">Elige tu piloto una vez. Este teléfono se acuerda y te enseña solo tu coche.</p>
+  <p id="chooseNote" class="mc-note" hidden></p>
+  <div id="pilotList" class="mc-pilots"></div>
+  <p id="chooseEmpty" class="mc-note" hidden>Todavía no hay pilotos registrados. Regístralos en la pantalla grande (Menú → Pilotos).</p>
+</section>
+
+<section id="carScreen" class="mc-car" hidden aria-label="Mi coche">
+  <div class="mc-who">
+    <img id="meAvatar" class="mc-avatar" alt="">
+    <div class="mc-name"><strong id="meName"></strong><span id="meCar"></span><span id="mePide" class="pide sin" role="status">⇄</span><span id="meFlags" class="gflags" role="status" title="Banderas amarillas que pediste en esta carrera" hidden></span><button type="button" id="changePilot" class="mc-change">Cambiar piloto</button></div>
+    <div class="mc-pos"><strong id="mePos">—</strong><span id="mePosOf"></span></div>
+  </div>
+  <div id="phaseBar" class="mc-phase"><span id="sessionTitle" class="mc-session"></span><strong id="phaseText">Conectando…</strong><span id="stageText" class="mc-stage"></span></div>
+  <div id="waitBox" class="mc-wait" hidden><strong id="waitTitle"></strong><p id="waitText"></p></div>
+  <div id="dashBox" class="mc-dash">
+    <div id="alerts" class="mc-alerts" aria-live="assertive"></div>
+    <canvas id="gauge" class="mc-gauge"></canvas>
+    <div class="mc-stats">
+      <div class="mc-stat mc-laps"><span>Vueltas</span><strong id="stLaps">—</strong></div>
+      <div class="mc-stat"><span>Última</span><strong id="stLast">—</strong><small id="stLastKmh" class="gkmh" hidden></small></div>
+      <div class="mc-stat"><span>Mejor</span><strong id="stBest">—</strong><small id="stBestKmh" class="gkmh" hidden></small></div>
+      <div class="mc-stat"><span id="stGapLabel">Diferencia</span><strong id="stGap">—</strong></div>
+      <div class="mc-stat"><span>Llanta</span><strong id="stFuel">—</strong></div>
+      <div class="mc-stat"><span id="stClockLabel">Tiempo</span><strong id="stClock">—</strong></div>
+    </div>
+    <div id="meTire" class="gtire mc-tire" role="status"></div>
+    <p id="mePits" class="mc-pits" role="status" hidden></p>
+    <div id="events" class="mc-events" aria-live="polite"></div>
+    <details id="lapsBox" class="mc-laplist" hidden><summary>Mis últimas vueltas</summary><table><thead><tr><th>#</th><th>Tiempo</th><th>km/h</th></tr></thead><tbody id="lapRows"></tbody></table></details>
+  </div>
+  <p class="mc-foot" id="wakeNote">Solo lectura: aquí no se arranca ni se termina nada. Empezar está en la pantalla grande.</p>
+</section>
+</main>
+<div id="lights" class="lights-overlay" hidden><div class="lights-box"><p class="eyebrow" id="lightsLabel"></p><div class="gp-lights"><i></i><i></i><i></i></div><strong id="lightsText">Pilotos, a sus lugares</strong></div></div>
+<div id="toast" role="status" aria-live="polite"></div>
+</body></html>

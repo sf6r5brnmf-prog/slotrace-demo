@@ -19,9 +19,10 @@ El acomodo por byte de D6 en ESTA tarjeta no está confirmado en vivo: ver FUEL_
 Un SOLO lector (clase SCX) abre el puerto y lo comparten el Gran Premio (add_listener)
 y Práctica/Carrera (add_finish_listener -> live.on_scx_finish). Nunca abrir dos.
 """
-import collections, json, os, random, select, threading, time
+import collections, copy, json, os, random, select, threading, time
 from pathlib import Path
 import durable
+import handicap as handicap_mod
 import gatillo as gatillo_mod
 import pits as pits_mod
 from pits import PitsTracker, classify_ee_crossing
@@ -131,14 +132,21 @@ class LapConfig:
             raise ValueError('Cada piloto necesita un coche distinto del 1 al 6.')
         out = {'source': d['source'], 'cars': list(cars)}
         if 'min_lap_s' in d: out['min_lap_s'] = cls.valid_min(d['min_lap_s'])
+        if 'handicap' in d: out['handicap'] = handicap_mod.clean(d['handicap'])   # ajuste de tiempo por vuelta (por coche)
         return out
     def read(self):
         with self.lock:
-            return {'source': self.data['source'], 'cars': list(self.data['cars']), 'min_lap_s': self.data.get('min_lap_s', self.default_min)}
+            return {'source': self.data['source'], 'cars': list(self.data['cars']), 'min_lap_s': self.data.get('min_lap_s', self.default_min),
+                    'handicap': copy.deepcopy(self.data.get('handicap') or handicap_mod.DEFAULT)}
+    def handicap(self):
+        """Handicap actual (clases por coche y segundos por clase). Un vueltas.json viejo = valores de fábrica."""
+        with self.lock:
+            return copy.deepcopy(self.data.get('handicap') or handicap_mod.DEFAULT)
     def write(self, d):
-        # Se puede mandar solo una parte (p. ej. {'min_lap_s': 9.5}); lo demás se conserva.
+        # Se puede mandar solo una parte (p. ej. {'min_lap_s': 9.5} o {'handicap': {'clases': {'3': 'con_iman'}}}); lo demás se conserva.
         if not isinstance(d, dict): raise ValueError('Datos inválidos.')
         with self.lock: cur = dict(self.data, cars=list(self.data['cars']))
+        if 'handicap' in d: d = dict(d, handicap=handicap_mod.clean(d['handicap'], cur.get('handicap') or handicap_mod.DEFAULT))
         d = self.validate(dict(cur, **d))
         with self.lock:
             durable.escribir_json(self.path, d, backup=True)   # archivo de datos, no el puerto

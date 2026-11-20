@@ -127,3 +127,17 @@ body.paro-on.paro-yellow{box-shadow:inset 0 0 0 8px #ffd000}
 @keyframes tireblink{50%{opacity:.45}}
 @media (prefers-reduced-motion:reduce){.gtire .tire-warn{animation:none}}
 .cfg-row input[type=text]{font:16px system-ui;background:#0b0d11;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:9px;width:150px;max-width:52%}
+/* Handicap · ajuste de tiempo por vuelta */
+.hmark{font:900 10px system-ui,sans-serif;margin-left:3px;padding:1px 4px;border-radius:4px;background:#ffe23b;color:#111;vertical-align:super;letter-spacing:0}
+.greal{display:block;margin-top:1px;font:600 11px system-ui,sans-serif;color:var(--muted,#9aa4b2);letter-spacing:0;text-transform:none}.greal[hidden]{display:none}
+.hclase{display:inline-block;margin-left:4px;font-size:11px;font-weight:800;padding:2px 6px;border-radius:5px;background:#ffe23b22;color:#ffe9a0;white-space:nowrap}.hclase[hidden]{display:none}
+.hc-box{margin-top:18px;border-top:1px solid var(--line,#2a313c);padding-top:14px}
+.hc-toggle{display:flex!important;align-items:center;gap:10px;font-weight:700}.hc-toggle input{width:22px;height:22px;accent-color:#c6ff3d}
+.hc-seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px}
+.hc-seg label{display:flex!important;flex-direction:column;gap:6px;border:1px solid var(--line,#2a313c);border-radius:9px;padding:9px 12px;margin:0!important}
+.hc-seg input{width:100%;font:700 18px ui-monospace,Menlo,monospace;background:#0b0d11;border:1px solid var(--line,#2a313c);border-radius:8px;color:var(--text,#edf2f7);padding:9px 11px}
+.car-row .car-selects{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.car-row select.hc-class{min-width:8.5em}
+.pick .pick-sel{display:flex;flex-direction:column;gap:6px}
+.hc-banner{margin:8px 0 0;padding:8px 12px;border-radius:9px;background:#ffe23b14;border:1px solid #ffe23b44;color:#ffe9a0;font-size:13px;font-weight:700}.hc-banner[hidden]{display:none}
+@media(max-width:850px){.hc-seg{grid-template-columns:1fr}.car-row{flex-wrap:wrap}.car-row .car-selects{width:100%;justify-content:stretch}.car-row .car-selects select{flex:1}}

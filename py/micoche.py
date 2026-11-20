@@ -114,7 +114,10 @@ def _vista_live(s, live_snap, slot, dash):
     scx_mode = s.get('lap_source') == 'scx'; scx_on = s.get('lap_source') in ('scx', 'both')
     cars = ((live_snap.get('laps_config') or {}).get('cars') or [])
     car = cars[slot] if slot < len(cars) and isinstance(cars[slot], int) else slot + 1
-    best = lambda p: min(l['s'] for l in p['laps']) if p['laps'] else None
+    raw_best = lambda p: min(l['s'] for l in p['laps']) if p['laps'] else None
+    hon = bool((s.get('handicap') or {}).get('on'))
+    # Handicap: posición, diferencia y «el último» con la mejor vuelta + segundos de la clase de su coche.
+    best = lambda p: (None if raw_best(p) is None else round(raw_best(p) + (p.get('h_s') or 0.0), 3)) if hon else raw_best(p)
     dsq = bool(me.get('dsq')); anydsq = any(p.get('dsq') for p in s['pilots'])
     # Descalificados: sin posición y al final (en Carrera, el descalificado es «el último»).
     timed = [p for p in s['pilots'] if p['laps'] and not p.get('dsq')]
@@ -131,7 +134,9 @@ def _vista_live(s, live_snap, slot, dash):
     notice = s.get('notice') or ''
     # Los avisos de «aprieta Empezar» son para la pantalla grande: aquí no hay Empezar.
     sesion['aviso'] = notice if notice and 'Empezar' not in notice and not any(n and n in notice for n in otros) else None
-    datos = {'car': car, 'por_turnos': not scx_on, 'laps': len(me['laps']), 'last': last['s'] if last else None, 'best': mine,
+    hs = (me.get('h_s') or 0.0) if hon else 0.0
+    datos = {'car': car, 'por_turnos': not scx_on, 'laps': len(me['laps']), 'last': last['s'] if last else None, 'best': raw_best(me),
+             'handicap_on': hon, 'h_s': hs, 'clase_txt': me.get('clase_txt'), 'best_h': mine, 'last_h': round(last['s'] + hs, 3) if last else None,
              'kmh': float(last['escala']) if last and isinstance(last.get('escala'), (int, float)) else None, 'fuel': fuel,
              'pos': rank, 'total': len(timed), 'gap': gap, 'gap_texto': _fmt_gap(gap), 'gap_vueltas': None,
              'en_pista': (not ended) and not rf and (s['phase'] == 'running' if scx_mode else s.get('active') == slot),
@@ -140,7 +145,7 @@ def _vista_live(s, live_snap, slot, dash):
              'dsq': dsq,
              'banderas': _banderas(me.get('banderas'), dsq, s.get('bandera_cfg'), bool(rf and rf.get('kind') == 'yellow'), bool(rf and rf.get('by') == slot)),
              'false_start': False, 'penalty': 0, 'finished': ended, 'finish_pos': rank if ended else None, 'grid': None,
-             'vueltas_lista': [{'n': l['n'], 's': l['s'], 'kmh': l.get('escala')} for l in me['laps'][-8:]][::-1],
+             'vueltas_lista': [{'n': l['n'], 's': l['s'], 'sh': round(l['s'] + hs, 3), 'kmh': l.get('escala')} for l in me['laps'][-8:]][::-1],
              'sospechosas': _sospechosas(me.get('sospechosas'), me.get('sospechosas_n'), s.get('min_lap_s') or (live_snap.get('laps_config') or {}).get('min_lap_s')),
              'pits': _pits(me.get('pits'))}
     if dsq: datos.update(en_pista=False, gap=None, gap_texto=None, finish_pos=None); sesion['aviso'] = None   # el teléfono ya lo dice en rojo (datos.dsq)
@@ -176,20 +181,23 @@ def _vista_gp(g, gp_snap, slot, dash):
     fuel = raw_fuel if cfg.get('fuel_enabled', True) and isinstance(raw_fuel, (int, float)) else None
     quali = g.get('quali') or []
     qmine = next((q for q in quali if q['slot'] == slot), None)
+    hon = bool((g.get('handicap') or {}).get('on')); qb = 'best_h' if hon else 'best'
+    hs = (me.get('h_s') or 0.0) if hon else 0.0
     base = {'car': car, 'por_turnos': False, 'laps': 0, 'last': None, 'best': None, 'kmh': None, 'fuel': fuel, 'pos': None, 'total': len(rows),
             'gap': None, 'gap_texto': None, 'gap_vueltas': None, 'en_pista': False, 'turno_tuyo': False, 'ultimo': False,
             'false_start': False, 'penalty': 0, 'finished': False, 'finish_pos': None, 'grid': None, 'vueltas_lista': [], 'eventos': evs,
             'sospechosas': _sospechosas([], 0, cfg.get('min_lap_s')), 'dsq': False,
             'banderas': _banderas(0, False, _gp_flag_cfg(cfg)),
             'pits': _pits(None),
-            'qualy': {'best': qmine['best'], 'laps': qmine['laps'], 'done': qmine['done'],
+            'handicap_on': hon, 'h_s': hs, 'clase_txt': me.get('clase_txt'), 'best_h': None, 'last_h': None,
+            'qualy': {'best': qmine['best'], 'best_h': qmine.get('best_h'), 'laps': qmine['laps'], 'done': qmine['done'],
                       'dsq': bool(qmine.get('dsq')),
-                      'pos': (1 + sum(1 for q in quali if q['best'] is not None and not q.get('dsq') and q['best'] < qmine['best'])) if qmine and qmine['best'] is not None and not qmine.get('dsq') else None,
+                      'pos': (1 + sum(1 for q in quali if q.get(qb) is not None and not q.get('dsq') and q[qb] < qmine[qb])) if qmine and qmine.get(qb) is not None and not qmine.get('dsq') else None,
                       'total': len(quali)} if qmine else None}
     if g.get('status') == 'done':
         fin = next((r for r in (g.get('final') or []) if r['slot'] == slot), None)
         if fin:
-            base.update(laps=fin['laps'], best=fin['best'], last=fin.get('last'), pos=fin.get('finish_pos') or fin.get('pos'),
+            base.update(laps=fin['laps'], best=fin['best'], last=fin.get('last'), pos=fin.get('finish_pos') or fin.get('pos'), best_h=fin.get('best_h') if hon else fin['best'], last_h=fin.get('last_h') if hon else fin.get('last'),
                         finish_pos=fin.get('finish_pos') or fin.get('pos'), finished=True, total=len(g.get('final') or []),
                         false_start=fin.get('false_start', False), penalty=fin.get('penalty', 0), kmh=fin.get('kmh'),
                         dsq=bool(fin.get('dsq')), banderas=_banderas(fin.get('banderas'), fin.get('dsq'), _gp_flag_cfg(cfg)),
@@ -206,20 +214,22 @@ def _vista_gp(g, gp_snap, slot, dash):
         return 'fuera', sesion, base
     lap_list = row.get('lap_list') or []
     base.update(laps=row['laps'], last=row['last'], best=row['best'], kmh=row.get('kmh'), false_start=row.get('false_start', False),
+                best_h=row.get('best_h') if hon else row['best'], last_h=row.get('last_h') if hon else row['last'],
                 penalty=row.get('penalty', 0), finished=row.get('finished', False), finish_pos=row.get('finish_pos'), grid=row.get('grid'),
                 en_pista=phase in ('running', 'finishing') and not row.get('finished'), turno_tuyo=True,
-                vueltas_lista=[{'n': l.get('n'), 's': l.get('s'), 'kmh': l.get('kmh'), 'valid': l.get('valid', True)} for l in lap_list[-8:]][::-1],
+                vueltas_lista=[{'n': l.get('n'), 's': l.get('s'), 'sh': l.get('sh', l.get('s')) if hon else l.get('s'), 'kmh': l.get('kmh'), 'valid': l.get('valid', True)} for l in lap_list[-8:]][::-1],
                 sospechosas=_sospechosas(row.get('sospechosas'), row.get('sospechosas_n'), cfg.get('min_lap_s')),
                 dsq=bool(row.get('dsq')),
                 banderas=_banderas(row.get('banderas'), row.get('dsq'), _gp_flag_cfg(cfg), bool(red and red.get('kind') == 'yellow'), bool(red and red.get('by') == slot)),
                 pits=_pits(row.get('pits')))
     if run.get('kind') == 'quali':
         # Qualy: posición contra la tabla de qualy (incluye su mejor vuelta en vivo).
-        bests = [q['best'] for q in quali if q['slot'] != slot and q['best'] is not None and not q.get('dsq')]
-        if row['best'] is not None:
-            base['pos'] = 1 + sum(1 for b in bests if b < row['best'])
-            top = min(bests + [row['best']])
-            base['gap'] = round(row['best'] - top, 3) if row['best'] > top else None
+        bests = [q[qb] for q in quali if q['slot'] != slot and q.get(qb) is not None and not q.get('dsq')]
+        mb = row.get('best_h') if hon else row['best']
+        if mb is not None:
+            base['pos'] = 1 + sum(1 for b in bests if b < mb)
+            top = min(bests + [mb])
+            base['gap'] = round(mb - top, 3) if mb > top else None
             base['gap_texto'] = _fmt_gap(base['gap'])
         base['total'] = len(quali) or 1
     else:

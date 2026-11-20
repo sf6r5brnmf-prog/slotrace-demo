@@ -59,6 +59,8 @@ def set_speed(x):
 def demo_defaults():
     """Primera vez: un Gran Premio cortito para enseñarlo (se cambia en Configuración)."""
     srv.gp.set_config({'config': {'preset': 'personal', 'quali_minutes': 1, 'heats_rounds': 1, 'heats_minutes': 1.5, 'final_laps': 5, 'final_wait_s': 20}})
+    # Handicap de ejemplo para enseñarlo: coche 2 con imán (+0.5 s por vuelta) y coche 4 modificado (+1 s). Se cambia en el menú.
+    srv.lap_config.write({'handicap': {'enabled': True, 'clases': {'2': 'con_iman', '4': 'modificado'}}})
 def _fix_modes(d):
     for root, dirs, files in _os.walk(d):
         for f in files:

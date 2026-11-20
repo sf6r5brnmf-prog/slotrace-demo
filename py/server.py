@@ -126,7 +126,7 @@ class Handler(BaseHTTPRequestHandler):
         assets={'/':('index.html','text/html; charset=utf-8'),'/app.js':('app.js','text/javascript; charset=utf-8'),'/style.css':('style.css','text/css; charset=utf-8'),
                 '/gp':('gp.html','text/html; charset=utf-8'),'/avisos.js':('avisos.js','text/javascript; charset=utf-8'),'/gp.js':('gp.js','text/javascript; charset=utf-8'),'/gauges.js':('gauges.js','text/javascript; charset=utf-8'),'/lights.js':('lights.js','text/javascript; charset=utf-8'),'/paro.js':('paro.js','text/javascript; charset=utf-8'),'/explosion.js':('explosion.js','text/javascript; charset=utf-8'),'/gatillo.js':('gatillo.js','text/javascript; charset=utf-8'),'/gp.css':('gp.css','text/css; charset=utf-8'),
                 '/micoche':('micoche.html','text/html; charset=utf-8'),'/micoche.js':('micoche.js','text/javascript; charset=utf-8'),'/micoche.css':('micoche.css','text/css; charset=utf-8'),'/micoche-icon.png':('micoche-icon.png','image/png'),
-                '/scx':('scx.html','text/html; charset=utf-8'),'/scx.js':('scx.js','text/javascript; charset=utf-8')}
+                '/scx':('scx.html','text/html; charset=utf-8'),'/scx.js':('scx.js','text/javascript; charset=utf-8'),'/handicap.js':('handicap.js','text/javascript; charset=utf-8')}
         if path=='/micoche/':path='/micoche'
         if path in assets:
             filename,mime=assets[path]
@@ -245,6 +245,8 @@ def wire(server):
     # Vuelta mínima válida: una sola (data/vueltas.json) para Práctica, Carrera, Gran Premio y Mi coche.
     gp.min_lap=server.lap_config.min_lap
     gp.set_min_lap=lambda v:server.lap_config.write({'min_lap_s':v})
+    # Handicap (ajuste de tiempo por vuelta por clase de coche): también en data/vueltas.json, uno para todo.
+    gp.handicap_actual=server.lap_config.handicap
     # Bandera amarilla del piloto: triple clic del botón de cambio de carril (la tarjeta SCX solo se escucha).
     # Una sola configuración (Gran Premio → Configuración) para GP, Práctica y Carrera.
     flag_cfg=lambda:gp_flag_config(gp.gp['config'] if gp.gp and gp.gp.get('status')=='active' else gp.config)

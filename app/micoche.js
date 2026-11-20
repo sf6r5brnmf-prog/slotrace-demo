@@ -109,7 +109,7 @@ function render(v){
   else if(v.estado==='no_estas'){renderWaiting('No estás en esta carrera',(s?s.titulo+' está corriendo sin ti. ':'')+'Si te agregan, tu coche aparece aquí solo.');}
   else if(v.estado==='espera_turno'||v.estado==='fuera'){
     const q=d&&d.qualy;let t=s&&s.aviso?s.aviso:'';
-    if(q&&q.best!=null)t+=' Tu qualy: mejor '+fmt(q.best)+(q.pos?' (P'+q.pos+' de '+q.total+')':'')+'.';
+    if(q&&q.best!=null)t+=' Tu qualy: mejor '+(d.handicap_on&&q.best_h!=null?fmt(q.best_h)+' con handicap':fmt(q.best))+(q.pos?' (P'+q.pos+' de '+q.total+')':'')+'.';
     renderWaiting(v.estado==='espera_turno'?'Espera tu turno':(s&&s.gp_terminado?'Gran Premio terminado':'Hoy te toca ver'),t.trim());
   }else{
     $('waitBox').hidden=true;$('dashBox').hidden=false;
@@ -119,7 +119,8 @@ function render(v){
     const pe=$('mePide'),pc=myCar?String(myCar):'';if(pe.dataset.car!==pc){if(pc)pe.dataset.car=pc;else delete pe.dataset.car;pe.classList.add('sin');}
     gauge.set(ready&&s.fuente==='gp'?null:d.kmh,d.fuel,dash.speed_max_kmh,PeluGauges.tireRed(dash));
     setText($('stLaps'),String(d.laps??0)+(s.target_laps?' / '+s.target_laps:''));
-    setText($('stLast'),fmt(d.last));setText($('stBest'),fmt(d.best));
+    // Handicap: tiempo ajustado con «H» (el real queda en el título); la velocidad siempre con el tiempo real.
+    PeluHandicap.setTime($('stLast'),d.last,d.h_s,d.handicap_on);PeluHandicap.setTime($('stBest'),d.best,d.h_s,d.handicap_on);
     PeluGauges.fillAvgKmh($('stLastKmh'),d.last,dash);PeluGauges.fillAvgKmh($('stBestKmh'),d.best,dash);
     let gl='Diferencia',gv='—';
     if(d.gap_vueltas!=null){gl='Al líder';gv=d.gap_vueltas===0?'Misma v.':'−'+d.gap_vueltas+' v';}
@@ -147,6 +148,7 @@ function render(v){
     if(s.fuente!=='gp'&&d.por_turnos&&d.turno_tuyo&&(s.fase==='ready'||s.fase==='paused'))alerts.push(['info','👉 Te toca: pon tu coche en la pista']);
     if(s.fase==='ready'&&d.grid)alerts.push(['info','Sales '+d.grid+'º en la parrilla']);
     if(s.aviso)alerts.push(['info',s.aviso]);
+    if(d.handicap_on&&d.h_s)alerts.push(['info','Handicap · '+(d.clase_txt||'')+': '+PeluHandicap.segTxt(d.h_s)+' por vuelta. Los tiempos con H ya lo incluyen.']);
     const pitsEl=$('mePits'),pitsText=d.pits?pitLine(d.pits):'';
     if(pitsEl){pitsEl.hidden=!pitsText;if(pitsEl.textContent!==pitsText)pitsEl.textContent=pitsText;}
     const box=$('alerts'),sig=JSON.stringify(alerts);
@@ -154,7 +156,7 @@ function render(v){
     const ev=$('events'),evs=(d.eventos||[]).slice().reverse(),es=JSON.stringify(evs.map(e=>e.id));
     if(ev.dataset.sig!==es){ev.dataset.sig=es;ev.replaceChildren(...evs.map(e=>{const x=document.createElement('div');x.textContent=({best:'★ ',false_start:'⚠ ',suspicious:'⚠ ',winner:'🏁 ',finish:'🏁 ',quali_done:'✔ ',yellow_flag:'🟨 ',dsq:'⛔ ',pit_entry:'🔧 ',pit_exit:'🔧 '}[e.type]||'• ')+e.text;return x;}));}
     const laps=d.vueltas_lista||[],lk=JSON.stringify(laps);$('lapsBox').hidden=!laps.length;
-    if(lk!==lastLapsKey){lastLapsKey=lk;$('lapRows').replaceChildren(...laps.map(l=>{const tr=document.createElement('tr');[l.n,fmt(l.s)+(l.valid===false?' ✕':''),l.kmh==null?'—':Math.round(l.kmh)].forEach(x=>{const td=document.createElement('td');td.textContent=x;tr.append(td);});return tr;}));}
+    if(lk!==lastLapsKey){lastLapsKey=lk;$('lapRows').replaceChildren(...laps.map(l=>{const tr=document.createElement('tr');[l.n,(d.handicap_on&&d.h_s&&l.sh!=null?fmt(l.sh)+' H':fmt(l.s))+(l.valid===false?' ✕':''),l.kmh==null?'—':Math.round(l.kmh)].forEach(x=>{const td=document.createElement('td');td.textContent=x;tr.append(td);});return tr;}));}
     handleEvents(d.eventos||[],v.server_time);
   }
   renderLights(v);

@@ -731,8 +731,8 @@ class GrandPrix:
         laps = [l['s'] for l in run['data'][str(slot)]['laps'] if l['valid']]
         return (round(sum(laps), 3), len(laps)) if laps else (None, 0)
     def total_h(self, run, slot):
-        t, n = self.total(run, slot)
-        return None if t is None else round(t + n * self.h_s(slot), 3)
+        laps = [l['s'] for l in run['data'][str(slot)]['laps'] if l['valid']]
+        return handicap_mod.suma(laps, self.h_s(slot)) if laps else None
 
     # ---------- clasificaciones ----------
     def net_laps(self, run, slot):
@@ -776,8 +776,9 @@ class GrandPrix:
             dsq = any(isinstance(r['data'].get(str(s)), dict) and r['data'][str(s)].get('dsq') for r in heats)
             tot = [self.total(r, s) for r in heats if str(s) in r['data']]; tsum = round(sum(t for t, n in tot if t is not None), 3) if any(t is not None for t, n in tot) else None
             hi = handicap_mod.info(self.handicap(), p['car'])
+            th = [x for x in (self.total_h(r, s) for r in heats if str(s) in r['data']) if x is not None]
             res.append(dict(hi, slot=s, laps=laps, best=best, rounds=per, dsq=dsq, best_h=handicap_mod.mas(best, hi['h_s']), total=tsum,
-                            total_h=None if tsum is None else round(tsum + sum(n for t, n in tot) * hi['h_s'], 3)))
+                            total_h=round(sum(th), 3) if th else None))
         if self.h_on():
             # Con handicap: misma suma de vueltas → desempata el tiempo total ajustado (vueltas reales + segundos de su clase).
             res.sort(key=lambda r: (r['dsq'], -r['laps'], r['total_h'] is None, r['total_h'] or 0, q.index(r['slot'])))
@@ -802,7 +803,7 @@ class GrandPrix:
                          'pits': self._pits_view(d, p['car'])})
             hi = handicap_mod.info(self.handicap(), p['car']); r = rows[-1]; h = hi['h_s']
             r.update(hi, best_h=handicap_mod.mas(r['best'], h), last_h=handicap_mod.mas(r['last'], h), total=self.total(run, s)[0], total_h=self.total_h(run, s),
-                     lap_list=[dict(l, sh=round(l['s'] + h, 3)) for l in r['lap_list']], cruce_pos=d['finish_pos'])
+                     lap_list=[dict(l, sh=handicap_mod.mas(l['s'], h)) for l in r['lap_list']], cruce_pos=d['finish_pos'])
         hon = self.h_on(run['participants'] or [])
         if hon:
             # Handicap: qualy por mejor vuelta ajustada; eliminatoria y final por vueltas y luego tiempo total ajustado.

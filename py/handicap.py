@@ -78,8 +78,23 @@ def info(h, car):
     return {'clase': k, 'clase_txt': NOMBRE[k], 'h_s': seg_de(h, car)}
 
 
+# Con ajuste negativo (resta), una vuelta ajustada nunca baja de este mínimo (ni de 0): p. ej. 10.2 s − 10 s
+# daría 0.2 s; se queda en 1 s. Con el ajuste en 0 o positivo el tiempo real se usa tal cual.
+MIN_VUELTA_H = 1.0
+
+
 def mas(x, h_s):
-    return None if x is None else round(x + h_s, 3)
+    """Vuelta (o mejor vuelta) con handicap. Si resta, nunca baja de MIN_VUELTA_H."""
+    if x is None: return None
+    v = x + (h_s or 0.0)
+    if h_s and h_s < 0: v = max(v, min(x, MIN_VUELTA_H))
+    return round(v, 3)
+
+
+def suma(vueltas, h_s):
+    """Tiempo total con handicap = suma de cada vuelta ajustada (cada una con el mínimo de arriba)."""
+    vueltas = list(vueltas)
+    return round(sum(mas(x, h_s) for x in vueltas), 3) if vueltas else None
 
 
 def texto_seg(v):

@@ -5,6 +5,8 @@ ese piloto: su coche, vueltas, última, mejor, posición, diferencia, vida de ll
 (La vida de llanta es el nivel D6 de la Pit Box en %; la clave sigue siendo 'fuel' y se agrega 'vida_llanta'.)
 Funciones puras sobre las mismas instantáneas que ya arma el servidor, para poder probarlas sin red.
 """
+import handicap as handicap_mod
+
 COLORS = [('Blanco', '#edf2f7'), ('Amarillo', '#ffe23b'), ('Rojo', '#ff4d50'), ('Azul', '#3d96ff'), ('Verde', '#50dc92'), ('Naranja', '#ff963d')]
 GP_KIND = {'quali': 'Qualy', 'heat': 'Eliminatoria', 'final': 'Final'}
 LIVE_PHASE = {'ready': 'Listos · esperando Empezar en la pantalla grande', 'countdown': '¡Semáforo! No aceleres antes del verde',
@@ -117,7 +119,7 @@ def _vista_live(s, live_snap, slot, dash):
     raw_best = lambda p: min(l['s'] for l in p['laps']) if p['laps'] else None
     hon = bool((s.get('handicap') or {}).get('on'))
     # Handicap: posición, diferencia y «el último» con la mejor vuelta + segundos de la clase de su coche.
-    best = lambda p: (None if raw_best(p) is None else round(raw_best(p) + (p.get('h_s') or 0.0), 3)) if hon else raw_best(p)
+    best = lambda p: handicap_mod.mas(raw_best(p), p.get('h_s') or 0.0) if hon else raw_best(p)
     dsq = bool(me.get('dsq')); anydsq = any(p.get('dsq') for p in s['pilots'])
     # Descalificados: sin posición y al final (en Carrera, el descalificado es «el último»).
     timed = [p for p in s['pilots'] if p['laps'] and not p.get('dsq')]
@@ -136,7 +138,7 @@ def _vista_live(s, live_snap, slot, dash):
     sesion['aviso'] = notice if notice and 'Empezar' not in notice and not any(n and n in notice for n in otros) else None
     hs = (me.get('h_s') or 0.0) if hon else 0.0
     datos = {'car': car, 'por_turnos': not scx_on, 'laps': len(me['laps']), 'last': last['s'] if last else None, 'best': raw_best(me),
-             'handicap_on': hon, 'h_s': hs, 'clase_txt': me.get('clase_txt'), 'best_h': mine, 'last_h': round(last['s'] + hs, 3) if last else None,
+             'handicap_on': hon, 'h_s': hs, 'clase_txt': me.get('clase_txt'), 'best_h': mine, 'last_h': handicap_mod.mas(last['s'], hs) if last else None,
              'kmh': float(last['escala']) if last and isinstance(last.get('escala'), (int, float)) else None, 'fuel': fuel,
              'pos': rank, 'total': len(timed), 'gap': gap, 'gap_texto': _fmt_gap(gap), 'gap_vueltas': None,
              'en_pista': (not ended) and not rf and (s['phase'] == 'running' if scx_mode else s.get('active') == slot),
@@ -145,7 +147,7 @@ def _vista_live(s, live_snap, slot, dash):
              'dsq': dsq,
              'banderas': _banderas(me.get('banderas'), dsq, s.get('bandera_cfg'), bool(rf and rf.get('kind') == 'yellow'), bool(rf and rf.get('by') == slot)),
              'false_start': False, 'penalty': 0, 'finished': ended, 'finish_pos': rank if ended else None, 'grid': None,
-             'vueltas_lista': [{'n': l['n'], 's': l['s'], 'sh': round(l['s'] + hs, 3), 'kmh': l.get('escala')} for l in me['laps'][-8:]][::-1],
+             'vueltas_lista': [{'n': l['n'], 's': l['s'], 'sh': handicap_mod.mas(l['s'], hs), 'kmh': l.get('escala')} for l in me['laps'][-8:]][::-1],
              'sospechosas': _sospechosas(me.get('sospechosas'), me.get('sospechosas_n'), s.get('min_lap_s') or (live_snap.get('laps_config') or {}).get('min_lap_s')),
              'pits': _pits(me.get('pits'))}
     if dsq: datos.update(en_pista=False, gap=None, gap_texto=None, finish_pos=None); sesion['aviso'] = None   # el teléfono ya lo dice en rojo (datos.dsq)

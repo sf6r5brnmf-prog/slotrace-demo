@@ -562,16 +562,16 @@ function hcCfg(){return lapConfig?.handicap||HC_FALLBACK;}
 function renderHandicapConfig(){
   const h=hcCfg(),en=$('hcEnabled');if(!en)return;
   if(document.activeElement!==en)en.checked=!!h.enabled;
-  PeluHandicap.CLASES.forEach(([k])=>{const i=$('hcSeg_'+k);if(i&&document.activeElement!==i)i.value=String(h.seg[k]??0);});
+  PeluHandicap.CLASES.forEach(([k])=>{const i=$('hcSeg_'+k);if(i&&i.hcField&&document.activeElement!==i)i.hcField.setValue(h.seg[k]??0);});
   $('hcSeg').classList.toggle('off',!h.enabled);
 }
 function saveHandicap(part){if(!lapConfig)return;saveLapConfig({source:lapConfig.source,cars:lapConfig.cars.slice(),handicap:part});}
 function setClase(car,clase){const c={};c[String(car)]=clase;saveHandicap({clases:c});}
 $('hcEnabled').addEventListener('change',()=>saveHandicap({enabled:$('hcEnabled').checked}));
-PeluHandicap.CLASES.forEach(([k])=>$('hcSeg_'+k).addEventListener('change',()=>{
-  const v=Number(String($('hcSeg_'+k).value).replace(',','.'));
-  if(!Number.isFinite(v)||v<-10||v>10){$('lapConfigError').textContent='El ajuste por vuelta debe ser de −10 a +10 segundos.';renderHandicapConfig();return;}
-  const seg={};seg[k]=Math.round(v*100)/100;saveHandicap({seg});
+// Cada clase: botón + / − (suma o resta) y el número; el teclado del iPhone no tiene signo menos.
+PeluHandicap.CLASES.forEach(([k])=>PeluHandicap.upgrade($('hcSeg_'+k),v=>{
+  if(!Number.isFinite(v)||v<-10||v>10){$('lapConfigError').textContent='El ajuste por vuelta debe ser de 0 a 10 segundos (el botón + / − elige si suma o resta).';renderHandicapConfig();return;}
+  const seg={};seg[k]=v;saveHandicap({seg});
 }));
 function setCar(slot,car){
   if(!lapConfig)return;const cars=lapConfig.cars.slice(),other=cars.indexOf(car);

@@ -413,7 +413,7 @@ class Live:
         for p in s['pilots']:
             car=car_of(p['slot']);h=hs[p['slot']]
             for l in p['laps']:
-                w.writerow([p['name'],car,l['n'],f3(l['s']),'' if l.get('escala') is None else round(l['escala'],1),'sí','','','',hcl(p['slot']),'%.2f'%h,f3(l['s']+h)])
+                w.writerow([p['name'],car,l['n'],f3(l['s']),'' if l.get('escala') is None else round(l['escala'],1),'sí','','','',hcl(p['slot']),'%.2f'%h,f3(handicap_mod.mas(l['s'],h))])
             for x in p.get('sospechosas') or []:
                 w.writerow([p['name'],x.get('car') or car,'',f3(x.get('s')),'','NO · sospechosa (menos de %g s)'%(x.get('min') or minimum),
                             hora(x.get('hora')),src.get(x.get('src'),x.get('src') or ''),x.get('tras_vuelta','')])
@@ -431,7 +431,7 @@ class Live:
                         pv['completadas'],'' if pv['ultima_s'] is None else '%.1f'%pv['ultima_s'],'' if not pv['completadas'] and not pv['en_pits'] else '%.1f'%pv['total_s'],
                         self.vel_txt(last),self.vel_txt(best),tire_now,ll['vueltas'],'' if ll['km'] is None else '%.1f'%ll['km'],
                         hcl(p['slot']),'%.2f'%hs[p['slot']],f3(handicap_mod.mas(best,hs[p['slot']])),
-                        f3(sum(l['s'] for l in p['laps'])) if p['laps'] else '',f3(sum(l['s'] for l in p['laps'])+hs[p['slot']]*len(p['laps'])) if p['laps'] else ''])
+                        f3(sum(l['s'] for l in p['laps'])) if p['laps'] else '',f3(handicap_mod.suma((l['s'] for l in p['laps']),hs[p['slot']])) if p['laps'] else ''])
         # Cada parada en pits = CAMBIO DE LLANTAS: vida de llanta al entrar/salir (%) y vueltas/km de ese juego.
         km_lap=self.km_lap()
         w.writerow([]);w.writerow(['CAMBIOS DE LLANTAS (PITS)','Piloto','Coche','Parada #','Vuelta al entrar','Entrada','Salida','Duración (s)','Vida de llanta al entrar (%)','Vida de llanta al salir (%)','Cómo salió','En curso','Llanta','Vueltas con ese juego','Km con ese juego'])

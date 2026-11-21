@@ -82,13 +82,14 @@ function renderConfig(cfg){
   // Handicap · ajuste de tiempo por vuelta: se guarda en data/vueltas.json (el mismo de Práctica y Carrera).
   const h=hcCfg(),box=el('fieldset','cfg-box hc-cfg');box.append(el('legend','','Handicap · ajuste de tiempo por vuelta (también en Práctica, Carrera y Mi coche)'));
   const en=el('label','cfg-row cfg-bool'),cb=el('input');cb.type='checkbox';cb.checked=!!h.enabled;cb.id='hcEnabled';en.append(cb,el('span','','Usar handicap (se suma o resta a cada vuelta según la clase del coche)'));box.append(en);
-  PeluHandicap.CLASES.forEach(([k,n])=>{const row=el('label','cfg-row'),i=el('input');i.type='number';i.step='0.1';i.min='-10';i.max='10';i.inputMode='decimal';i.value=String(h.seg[k]??0);i.dataset.hc=k;row.append(el('span','',PeluHandicap.ICON[k]+' '+n+' · segundos por vuelta (+ suma, − resta)'),i);box.append(row);});
+  PeluHandicap.CLASES.forEach(([k,n])=>{const row=el('div','cfg-row hc-row'),i=el('input');i.id='hcCfg_'+k;i.dataset.hc=k;const lb=el('label','',PeluHandicap.ICON[k]+' '+n+' · segundos por vuelta');lb.htmlFor=i.id;row.append(lb,i);box.append(row);PeluHandicap.upgrade(i).setValue(h.seg[k]??0);});
+  box.append(el('p','muted','Toca + / − para elegir si SUMA o RESTA segundos, y escribe el número (0 a 10). Si resta, una vuelta ajustada nunca baja de 1 s.'));
   box.append(el('p','muted','Los de fábrica (Con imán +0.5 s, Modificado +1 s, Sin imán 0 s) son ejemplos: cámbialos. La clase de cada coche se elige en «Nuevo Gran Premio», junto al número de coche. Queda fijo al arrancar la primera parte del Gran Premio.'));
   f.append(box);
 }
 function hcCfg(){return state?.handicap_cfg||{enabled:true,seg:{sin_iman:0,con_iman:0.5,modificado:1},clases:{}};}
-function readHandicap(){const seg={};let bad=false;$('configForm').querySelectorAll('[data-hc]').forEach(i=>{const v=Number(String(i.value).replace(',','.'));if(!Number.isFinite(v)||v<-10||v>10)bad=true;seg[i.dataset.hc]=Math.round(v*100)/100;});
-  if(bad)throw Error('El ajuste por vuelta debe ser de −10 a +10 segundos.');return {enabled:$('hcEnabled').checked,seg};}
+function readHandicap(){const seg={};let bad=false;$('configForm').querySelectorAll('[data-hc]').forEach(i=>{const v=i.hcField?i.hcField.getValue():Number(String(i.value).replace(',','.'));if(!Number.isFinite(v)||v<-10||v>10)bad=true;seg[i.dataset.hc]=Math.round(v*100)/100;});
+  if(bad)throw Error('El ajuste por vuelta debe ser un número de 0 a 10 segundos (el botón + / − elige si suma o resta).');return {enabled:$('hcEnabled').checked,seg};}
 async function saveHandicap(part){const d=await post('/api/vueltas-config',{handicap:part});if(state)state.handicap_cfg=d.handicap;return d.handicap;}
 function readConfig(){const out={};$('configForm').querySelectorAll('[data-key]').forEach(i=>{const k=i.dataset.key;out[k]=i.dataset.type==='bool'?i.checked:i.dataset.type==='sel'||i.dataset.type==='text'?i.value:Number(i.value);});
   ['heats_rounds','finalists','final_laps','final_wait_s','lights_seconds','false_start_penalty_laps','false_start_throttle','scale','speed_max_kmh','fuel_red_pct','tire_red_pct','sound_volume','pilot_flag_clicks','pilot_flag_max'].forEach(k=>{if(k in out)out[k]=Math.round(out[k]);});out.preset='personal';return out;}

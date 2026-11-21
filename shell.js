@@ -1,7 +1,7 @@
 'use strict';
 // Contenedor de la DEMO: arranca el servidor real (Python) dentro del navegador y muestra la app real en un iframe.
 (function(){
-const V='202611201511';
+const V='202611211027';
 const PY=['durable.py','instancia.py','handicap.py','pits.py','gatillo.py','scx.py','live.py','gp.py','micoche.py','esp32usb.py','server.py','demo_glue.py'];
 const NAMES=['Ernesto','Pepe','Lalo','Mica'];
 const PAGES=['index.html','gp.html','micoche.html','scx.html'];

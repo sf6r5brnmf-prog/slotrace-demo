@@ -12,21 +12,30 @@ function pitLine(pits){if(!pits)return '';if(pits.en_pits){const t=pitElapsed(pi
 const fmt=s=>s==null?'—':Number(s).toFixed(2)+' s';
 function clock(ms){if(ms==null)return'—';const t=Math.ceil(ms/1000),m=Math.floor(t/60),s=t%60;return m+':'+String(s).padStart(2,'0');}
 function setText(node,t){t=t==null?'':String(t);if(node&&node.textContent!==t)node.textContent=t;}
-function avatarSrc(path){return path?path+(path.includes('?')?'&':'?')+'v=mica2':'';}
+function avatarSrc(path){if(path&&path.startsWith('data:'))return path;return path?path+(path.includes('?')?'&':'?')+'v=mica2':'';}
 function toast(t){const b=$('toast');b.textContent=t;b.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>b.style.display='none',4200);}
 
 let roster=null,choice=null,state=null,screen='',fails=0,polling=false,timer=null,ctrl=null,started=0,lastFinish=performance.now();
+let torneo=null;   // torneo por mangas activo: {id, pilots:[{slot,name,nivel,avatar}]}
 let rosterFails=0,lastEventId=null,soundDeadline=null,lastLapsKey='';
 
 /* ---------- piloto elegido en este teléfono ---------- */
 function loadChoice(){try{const v=JSON.parse(localStorage.getItem(KEY)||'null');if(v&&Number.isInteger(v.slot)&&typeof v.name==='string')return v;}catch(e){}return null;}
 function saveChoice(c){choice=c;try{if(c)localStorage.setItem(KEY,JSON.stringify(c));else localStorage.removeItem(KEY);}catch(e){}}
-function urlFor(c){return 'micoche.html'+(c?'?piloto='+encodeURIComponent(c.name):'');}
+function urlFor(c){return 'micoche.html'+(c?(c.torneo?'?torneo=':'?piloto=')+encodeURIComponent(c.name):'');}
 function setUrl(c){try{const u=urlFor(c);if(location.pathname+location.search!==u)history.replaceState(null,'',u);}catch(e){}}
 function norm(s){return String(s||'').trim().toLocaleLowerCase('es-MX');}
 function resolve(){
   // ?piloto=Ernesto (o ?piloto=1) manda sobre lo guardado: así cada marcador / ícono abre a su piloto.
   const slots=roster.slots||[];
+  // Torneo por mangas: ?torneo=Nombre, o lo guardado con torneo:true (piloto inscrito, no del registro de 6).
+  const tp=torneo?torneo.pilots:[],tq=new URLSearchParams(location.search).get('torneo');
+  if(tq){const t=tp.find(p=>norm(p.name)===norm(tq));if(t){saveChoice({slot:t.slot,name:t.name,torneo:true});return {ok:true};}
+    return {ok:false,note:torneo?'No encontré a «'+tq+'» en el torneo. Elige tu piloto.':'Ahorita no hay torneo. Elige tu piloto.'};}
+  const sv=loadChoice();
+  if(sv&&sv.torneo){const t=tp.find(p=>norm(p.name)===norm(sv.name));if(t){saveChoice({slot:t.slot,name:t.name,torneo:true});return {ok:true};}
+    const i=slots.findIndex(p=>p&&norm(p.name)===norm(sv.name));if(i>=0){saveChoice({slot:i,name:slots[i].name});return {ok:true};}
+    saveChoice(null);return {ok:false,note:'El torneo de «'+sv.name+'» ya no está. Elige tu piloto.'};}
   const param=new URLSearchParams(location.search).get('piloto');
   if(param){
     let i=slots.findIndex(p=>p&&norm(p.name)===norm(param));
@@ -45,15 +54,25 @@ function renderChooser(note){
   show('choose');PeluLights.hide();PeluParo.hide();document.body.style.removeProperty('--team');
   const n=$('chooseNote');n.hidden=!note;setText(n,note||'');
   const list=$('pilotList'),slots=roster?.slots||[],colors=roster?.colors||[];
-  const sig=JSON.stringify(slots.map(p=>p&&[p.name,p.avatar]));if(list.dataset.sig===sig)return;list.dataset.sig=sig;list.replaceChildren();
+  const sig=JSON.stringify([slots.map(p=>p&&[p.name,p.avatar]),torneo]);if(list.dataset.sig===sig)return;list.dataset.sig=sig;list.replaceChildren();
+  if(torneo&&torneo.pilots.length){
+    const h=document.createElement('h2');h.className='mc-tq-h';h.textContent='🏆 Torneo por mangas · '+torneo.pilots.length+' pilotos';list.append(h);
+    const NC={novato:'#2fbf71',intermedio:'#3d8bfd',experto:'#f5c542'},NT={novato:'Novato',intermedio:'Intermedio',experto:'Experto'};
+    torneo.pilots.forEach(p=>{const b=document.createElement('button');b.type='button';b.className='mc-pilot mc-tq';b.style.setProperty('--team',NC[p.nivel]||'#d5ff42');
+      const img=document.createElement('img');img.src=avatarSrc(p.avatar);img.alt='';img.addEventListener('error',()=>img.removeAttribute('src'),{once:true});
+      const nm=document.createElement('strong');nm.textContent=p.name;const sm=document.createElement('small');sm.textContent=NT[p.nivel]||'';
+      b.append(img,nm,sm);b.addEventListener('click',()=>pickTorneo(p));list.append(b);});
+    if(slots.some(Boolean)){const h2=document.createElement('h2');h2.className='mc-tq-h';h2.textContent='Registro de pilotos (Práctica y Carrera)';list.append(h2);}
+  }
   slots.forEach((p,i)=>{if(!p)return;
     const b=document.createElement('button');b.type='button';b.className='mc-pilot';b.dataset.slot=i;b.style.setProperty('--team',colors[i]?.hex||'#d5ff42');
     const img=document.createElement('img');img.src=avatarSrc(p.avatar);img.alt='';img.addEventListener('error',()=>img.removeAttribute('src'),{once:true});
     const nm=document.createElement('strong');nm.textContent=p.name;const sm=document.createElement('small');sm.textContent=colors[i]?.name||'';
     b.append(img,nm,sm);b.addEventListener('click',()=>pick(i));list.append(b);});
-  $('chooseEmpty').hidden=slots.some(Boolean);
+  $('chooseEmpty').hidden=slots.some(Boolean)||!!(torneo&&torneo.pilots.length);
 }
 function pick(i){const p=roster.slots[i];if(!p)return;saveChoice({slot:i,name:p.name});setUrl(choice);state=null;lastEventId=null;lastLapsKey='';show('car');renderWaiting('Conectando…','Buscando tu coche en la sesión.');schedule(0);keepAwake();}
+function pickTorneo(p){saveChoice({slot:p.slot,name:p.name,torneo:true});setUrl(choice);state=null;lastEventId=null;lastLapsKey='';show('car');renderWaiting('Conectando…','Buscando tu turno en el torneo.');schedule(0);keepAwake();}
 $('changePilot').addEventListener('click',()=>{saveChoice(null);setUrl(null);state=null;$('pilotList').dataset.sig='';renderChooser();});
 
 /* ---------- sonido (mismo interruptor por equipo que las otras pantallas) ---------- */
@@ -89,11 +108,17 @@ function renderPilot(p,d){
   // Bandera amarilla del piloto: «🟨 2/4» (las que pidió en esta carrera) o DSQ. Solo se ve; aquí no se quita nada.
   const fl=$('meFlags'),b=d&&d.banderas,ft=!b?'':b.dsq?'⛔ DESCALIFICADO':(!b.on&&!b.usadas)?'':b.texto;
   setText(fl,ft);fl.hidden=!ft;fl.classList.toggle('dsq',!!(b&&b.dsq));fl.classList.toggle('full',!!(b&&!b.dsq&&b.usadas>=b.max));
-  if(choice&&choice.name!==p.name)saveChoice({slot:p.slot,name:p.name});
+  if(choice&&choice.name!==p.name)saveChoice({slot:p.slot,name:p.name,torneo:!!p.torneo||undefined});
+}
+function renderTurno(t){
+  // Torneo: cuándo me toca (siempre visible arriba, también cuando no estoy corriendo).
+  const b=$('meTurno');if(!b)return;b.hidden=!t||!t.texto;if(!t)return;
+  b.className='mc-turno '+(t.ahora?'ahora':t.estado||'');setText($('meTurnoTxt'),t.texto||'');
+  setText($('meTurnoTag'),t.ahora?'¡TE TOCA!':t.estado==='eliminado'?'ELIMINADO':t.estado==='campeon'?'CAMPEÓN':t.estado==='finalista'?'FINAL':'TU TURNO');
 }
 function render(v){
   const p=v.piloto,s=v.sesion,d=v.datos,dash=v.dashboard||{};
-  renderPilot(p,d);
+  renderPilot(p,d);renderTurno(v.torneo);
   const bar=$('phaseBar');
   setText($('sessionTitle'),s?s.titulo:'Puto el último');
   let phaseText=s?s.fase_texto:'Sin sesión';
@@ -208,6 +233,7 @@ function stale(v){
 function apply(v){
   PeluAvisos.show(v.boot,v.avisos);
   if(PeluAvisos.restarted(v.boot)){toast('El servidor de la Mac se reinició. Ya está conectado otra vez.');state=null;soundDeadline=null;lastEventId=null;}
+  if(v.estado==='sin_piloto'&&choice&&choice.torneo){saveChoice(null);setUrl(null);loadRoster().then(()=>renderChooser('El torneo ya no está activo. Elige tu piloto.'));return;}
   if(v.estado==='sin_piloto'){saveChoice(null);setUrl(null);loadRoster().then(()=>renderChooser('Tu piloto ya no está en el registro. Elige otra vez.'));return;}
   if(stale(v))return;
   state=v;show('car');render(v);
@@ -218,7 +244,7 @@ async function poll(){
   if(polling)return;polling=true;started=performance.now();
   const c=new AbortController();ctrl=c;const to=setTimeout(()=>c.abort(),2500);
   try{
-    const r=await fetch('/api/micoche?slot='+choice.slot+'&ts='+Date.now(),{cache:'no-store',signal:c.signal});
+    const r=await fetch('/api/micoche?'+(choice.torneo?'torneo=':'slot=')+choice.slot+'&ts='+Date.now(),{cache:'no-store',signal:c.signal});
     if(!r.ok)throw Error('HTTP '+r.status);
     const v=await r.json();if(!v||!('estado' in v))throw Error('Respuesta incompleta');
     fails=0;online();
@@ -243,7 +269,10 @@ window.addEventListener('online',wakeUp);
 
 /* ---------- arranque ---------- */
 async function loadRoster(){
-  const r=await fetch('/api/roster',{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);roster=await r.json();rosterFails=0;return roster;
+  const r=await fetch('/api/roster',{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);roster=await r.json();rosterFails=0;
+  // ¿Hay un torneo por mangas? Sus pilotos inscritos también se pueden elegir aquí.
+  try{const q=await fetch('/api/micoche/torneo',{cache:'no-store'});if(q.ok)torneo=(await q.json()).torneo||null;}catch(e){}
+  return roster;
 }
 let booting=false;
 async function boot(){

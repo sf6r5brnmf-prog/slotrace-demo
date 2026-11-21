@@ -6,6 +6,7 @@ from pathlib import Path
 import durable
 import pits as pits_mod
 import handicap as handicap_mod
+import torneo as torneo_mod
 
 DEFAULTS = {
     'preset': 'estandar',
@@ -27,6 +28,8 @@ DEFAULTS = {
     # Vida de llanta: el nivel D6 de la Pit Box (lo que ella llama «combustible») se muestra como llanta en %.
     # Solo nombre y zona roja; no hay desgaste inventado. Verde >50 %, amarilla 20–50 %, roja <20 %.
     'tire_name': 'Media', 'tire_red_pct': 20,
+    # Torneo por mangas (7 o más pilotos): coches por manga, minutos de cada manga, cómo se arman y vueltas de la final.
+    'torneo_cars': 3, 'torneo_minutes': 3.0, 'torneo_agrupar': 'nivel', 'torneo_final_laps': 10,
     'cars': {},
 }
 
@@ -65,6 +68,7 @@ FIELDS = {
     'pit_exit_low_throttle': (int, 0, 15), 'pit_exit_fuel_idle_s': (float, 0.2, 10),
     'pit_exit_throttle_hold_s': (float, 0.05, 5), 'pit_exit_timeout_s': (float, 5, 300),
     'tire_name': (str, None, 24), 'tire_red_pct': (int, 0, 50),
+    'torneo_cars': (int, 2, 6), 'torneo_minutes': (float, 0.25, 60), 'torneo_agrupar': (str, ['nivel', 'mezcla']), 'torneo_final_laps': (int, 1, 500),
 }
 FLAG_KEYS = ('pilot_flag_enabled', 'pilot_flag_clicks', 'pilot_flag_window_s', 'pilot_flag_max', 'pilot_flag_dsq')
 TIRE_KEYS = ('tire_name', 'tire_red_pct')
@@ -137,7 +141,7 @@ RED_NOTICE = '🚩 BANDERA ROJA · PARO. Suelten el gatillo. El reloj está dete
 YELLOW_NOTICE = '🟨 BANDERA AMARILLA · la pidió %s (%d de %d). Suelten el gatillo. El reloj está detenido y las vueltas no cuentan hasta Reanudar (pantalla grande).'
 DSQ_NOTICE = '⛔ %s DESCALIFICADO: pidió una bandera amarilla más de las %d permitidas. Sus vueltas ya no cuentan en esta parte.'
 
-class GrandPrix:
+class GrandPrix(torneo_mod.TorneoMixin):
     def __init__(self, directory, scx, live=None):
         self.directory = Path(directory); self.scx = scx; self.live = live
         self.lock = threading.RLock(); self.stop_event = threading.Event(); self.dirty = False
@@ -239,6 +243,9 @@ class GrandPrix:
     def command(self, payload, roster):
         with self.lock:
             action = payload.get('action'); g = self.gp
+            if action == 'create' and payload.get('mode') == 'torneo':
+                try: return self._create_torneo(payload, roster)
+                except torneo_mod.TorneoError as e: raise GPError(str(e), e.status)
             if action == 'create':
                 if g and g['status'] == 'active': raise GPError('Ya hay un Gran Premio en curso. Termínalo o cancélalo primero.', 409)
                 ids = payload.get('slots')
@@ -326,6 +333,10 @@ class GrandPrix:
             elif action == 'next':
                 if not run or run['phase'] != 'done': raise GPError('Termina esta parte antes de pasar a la siguiente.')
                 self._advance()
+            elif action in ('swap', 'set_car'):
+                if not self.es_torneo(): raise GPError('Solo en el torneo por mangas.')
+                try: self.torneo_command(action, payload)
+                except torneo_mod.TorneoError as e: raise GPError(str(e), e.status)
             elif action == 'cancel':
                 g['status'] = 'cancelled'; self._archive(); self.gp = None; self.dirty = True
                 self._forget()
@@ -341,6 +352,12 @@ class GrandPrix:
     def _prepare(self, run):
         """Define quién corre y en qué orden de salida."""
         g = self.gp
+        if self.es_torneo():
+            # Torneo: quién corre y con qué coche ya lo dijo el sorteo (o el cambio a mano).
+            for s in run['participants']: self.pilot(s)['car'] = run['cars'][str(s)]
+            run['grid'] = list(run['participants'])
+            run['data'] = {str(s): run['data'].get(str(s)) or self._new_data() for s in run['participants']}
+            return
         if run['kind'] == 'heat': run['participants'] = self.quali_order()
         elif run['kind'] == 'final':
             heats = any(r['kind'] == 'heat' for r in g['runs'])
@@ -353,6 +370,7 @@ class GrandPrix:
         run['data'] = {str(s): run['data'].get(str(s)) or self._new_data() for s in run['participants']}
     def _advance(self):
         g = self.gp
+        if self.es_torneo(): return self._torneo_advance()
         if g['current'] + 1 >= len(g['runs']):
             g['status'] = 'done'; g['finished_at'] = time.time(); self._event('podium', text='Gran Premio terminado'); self._archive(write_only=True)
             return
@@ -361,7 +379,7 @@ class GrandPrix:
         g = self.gp; now = time.monotonic()
         run.update(phase='running', green_at=now, green_wall=time.time())
         if run['kind'] in ('quali', 'heat'):
-            mins = g['config']['quali_minutes'] if run['kind'] == 'quali' else g['config']['heats_minutes']
+            mins = g['config']['quali_minutes'] if run['kind'] == 'quali' else (self._minutes_torneo() if self.es_torneo() else g['config']['heats_minutes'])
             run['ends_at'] = now + mins * 60; run['duration_s'] = mins * 60
         for s in run['participants']:
             d = run['data'][str(s)]
@@ -441,7 +459,7 @@ class GrandPrix:
     def _slot_for_car(self, run, car):
         if run['kind'] == 'quali' and self.gp['config']['quali_any_car']: return run['participants'][0]
         for s in run['participants']:
-            if self.pilot(s)['car'] == car: return s
+            if self.car_of(run, s) == car: return s
         return None
     def _false_start(self, run, slot, why):
         d = run['data'][str(slot)]
@@ -501,7 +519,7 @@ class GrandPrix:
         if valid and prev_best is not None and lap_s < prev_best: self._event('best', slot, 'Mejor vuelta: %.2f s' % lap_s)
         if run['kind'] == 'quali' and run['phase'] == 'finishing': d['done'] = True; self._finish(run)
         elif run['kind'] == 'final':
-            if self.net_laps(run, slot) >= cfg['final_laps'] and run['phase'] == 'running': self._final_finish(run, slot, t, winner=True)
+            if self.net_laps(run, slot) >= self.final_laps() and run['phase'] == 'running': self._final_finish(run, slot, t, winner=True)
             elif run['phase'] == 'finishing': self._final_finish(run, slot, t)
         self._touch()
     def _final_finish(self, run, slot, t, winner=False):
@@ -580,7 +598,7 @@ class GrandPrix:
                     rec['abierta'] = False
             if tr is None: continue
             p = next((x for x in (self.gp.get('pilots') or []) if x.get('slot') == s), None)
-            car = None if p is None else p.get('car')
+            car = (run.get('cars') or {}).get(str(s)) or (None if p is None else p.get('car'))
             if type(car) == int:
                 try: tr.reset(car - 1, reason=reason)
                 except Exception as e:
@@ -597,7 +615,7 @@ class GrandPrix:
                 tr = getattr(self.scx, 'pits', None)
                 if tr is None: continue
                 try:
-                    car = self.pilot(s)['car']
+                    car = self.car_of(run, s)
                     if type(car) == int: tr.rehydrate(car - 1, rec)
                 except Exception as e:
                     print('Error al retomar pits: ' + type(e).__name__ + ': ' + str(e), flush=True)
@@ -670,7 +688,7 @@ class GrandPrix:
             thr = cfg['false_start_throttle']
             if thr > 0 and not (run['kind'] == 'quali' and cfg['quali_source'] == 'ir'):
                 for s in run['participants']:
-                    v = self.scx.throttle_now(self.pilot(s)['car'] - 1)
+                    v = self.scx.throttle_now(self.car_of(run, s) - 1)
                     if v is not None and v >= thr: self._false_start(run, s, 'aceleró antes del verde')
             if now >= run['countdown_until']: self._go(run); self._touch()
         elif run['phase'] in ('running', 'finishing'):
@@ -720,19 +738,24 @@ class GrandPrix:
         if g.get('handicap_v'): return self.handicap_actual_cfg()
         if any(r['phase'] != 'ready' or any(isinstance(d, dict) and d.get('laps') for d in (r.get('data') or {}).values()) for r in g['runs']): return None
         return self.handicap_actual_cfg()
-    def h_s(self, slot):
-        return handicap_mod.seg_de(self.handicap(), self.pilot(slot)['car'])
-    def h_on(self, slots=None):
+    def final_laps(self):
+        g = self.gp; c = g['config'] if g else self.config
+        return int(c.get('torneo_final_laps', 10)) if self.es_torneo() else c['final_laps']
+    def h_s(self, slot, run=None):
+        return handicap_mod.seg_de(self.handicap(), self.car_of(run, slot))
+    def h_on(self, slots=None, run=None):
         g = self.gp
         if not g: return False
+        # Torneo: todos los coches pasan por todos los pilotos; un solo criterio para todo el torneo (coches 1 a 6).
+        if self.es_torneo(): return handicap_mod.activo(self.handicap(), list(range(1, 7)))
         slots = [p['slot'] for p in g['pilots']] if slots is None else slots
-        return handicap_mod.activo(self.handicap(), [self.pilot(s)['car'] for s in slots])
+        return handicap_mod.activo(self.handicap(), [self.car_of(run, s) for s in slots])
     def total(self, run, slot):
         laps = [l['s'] for l in run['data'][str(slot)]['laps'] if l['valid']]
         return (round(sum(laps), 3), len(laps)) if laps else (None, 0)
     def total_h(self, run, slot):
         laps = [l['s'] for l in run['data'][str(slot)]['laps'] if l['valid']]
-        return handicap_mod.suma(laps, self.h_s(slot)) if laps else None
+        return handicap_mod.suma(laps, self.h_s(slot, run)) if laps else None
 
     # ---------- clasificaciones ----------
     def net_laps(self, run, slot):
@@ -790,21 +813,22 @@ class GrandPrix:
         g = self.gp; cfg = g['config']; fuel = self.scx.fuel(); rows = []
         for s in run['participants'] or []:
             p = self.pilot(s); d = run['data'][str(s)]; last = d['laps'][-1] if d['laps'] else None
-            rows.append({'slot': s, 'name': p['name'], 'avatar': p['avatar'], 'car': p['car'], 'laps': self.net_laps(run, s), 'raw_laps': len(d['laps']),
+            pcar = self.car_of(run, s)
+            rows.append({'slot': s, 'name': p['name'], 'avatar': p['avatar'], 'car': pcar, 'nivel': p.get('nivel'), 'laps': self.net_laps(run, s), 'raw_laps': len(d['laps']),
                          'last': last['s'] if last else None, 'best': self.best(run, s), 'kmh': last['kmh'] if last else None,
-                         'fuel': fuel[p['car'] - 1] if cfg['fuel_enabled'] else None,
-                         'vida_llanta': fuel[p['car'] - 1] if cfg['fuel_enabled'] else None,   # mismo valor que 'fuel', en %
+                         'fuel': fuel[pcar - 1] if cfg['fuel_enabled'] else None,
+                         'vida_llanta': fuel[pcar - 1] if cfg['fuel_enabled'] else None,   # mismo valor que 'fuel', en %
                          'false_start': d['false_start'], 'penalty': d['penalty'],
                          'started': d['started'], 'finished': d['finished_at'] is not None, 'finish_pos': d['finish_pos'],
                          '_last_cross': d['last_cross'] or 0, 'grid': run['grid'].index(s) + 1 if s in run.get('grid', []) else None,
                          'lap_list': d['laps'][-60:], 'sospechosas': (d.get('sospechosas') or [])[-20:],
                          'sospechosas_n': len(d.get('sospechosas') or []),
                          'dsq': bool(d.get('dsq')), 'banderas': d.get('banderas', 0),
-                         'pits': self._pits_view(d, p['car'])})
-            hi = handicap_mod.info(self.handicap(), p['car']); r = rows[-1]; h = hi['h_s']
+                         'pits': self._pits_view(d, pcar)})
+            hi = handicap_mod.info(self.handicap(), pcar); r = rows[-1]; h = hi['h_s']
             r.update(hi, best_h=handicap_mod.mas(r['best'], h), last_h=handicap_mod.mas(r['last'], h), total=self.total(run, s)[0], total_h=self.total_h(run, s),
                      lap_list=[dict(l, sh=handicap_mod.mas(l['s'], h)) for l in r['lap_list']], cruce_pos=d['finish_pos'])
-        hon = self.h_on(run['participants'] or [])
+        hon = self.h_on(run['participants'] or [], run)
         if hon:
             # Handicap: qualy por mejor vuelta ajustada; eliminatoria y final por vueltas y luego tiempo total ajustado.
             if run['kind'] == 'quali': key = lambda r: (r['dsq'], r['best_h'] is None, r['best_h'] or 0)
@@ -835,6 +859,7 @@ class GrandPrix:
             if not g: return out
             now = time.monotonic(); run = self.current()
             v = {k: copy.deepcopy(g[k]) for k in ['id', 'created_at', 'status', 'config', 'pilots', 'order', 'current', 'events', 'version', 'notice']}
+            v['mode'] = g.get('mode', 'gp')
             v['config']['min_lap_s'] = self.min_lap_s()
             for k in FLAG_KEYS: v['config'].setdefault(k, DEFAULTS[k])   # GP guardado antes de la bandera del piloto
             for k in PIT_KEYS: v['config'].setdefault(k, DEFAULTS[k])   # GP guardado antes del tiempo en pits
@@ -845,10 +870,15 @@ class GrandPrix:
             v['handicap'] = {'on': self.h_on(), 'enabled': bool(hcfg and hcfg.get('enabled')), 'resumen': handicap_mod.resumen(hcfg),
                              'seg': (hcfg or handicap_mod.OFF)['seg'], 'fijo': bool(g.get('handicap_fijo'))}
             v['runs'] = [{'key': r['key'], 'kind': r['kind'], 'label': r['label'], 'phase': r['phase'], 'skipped': r.get('skipped', False)} for r in g['runs']]
-            v['quali'] = self.quali_results() if g['config']['quali_enabled'] else []
-            v['heats'] = self.heat_standings() if any(r['kind'] == 'heat' for r in g['runs']) else []
-            final = g['runs'][-1]
-            v['final'] = self.run_rows(final) if final['participants'] else []
+            if self.es_torneo():
+                v['quali'] = []; v['heats'] = []; v['torneo'] = self.torneo_view(); v['final'] = self.torneo_final_rows()
+                final = g['runs'][-1]
+            else:
+                v['quali'] = self.quali_results() if g['config']['quali_enabled'] else []
+                v['heats'] = self.heat_standings() if any(r['kind'] == 'heat' for r in g['runs']) else []
+                final = g['runs'][-1]
+                v['final'] = self.run_rows(final) if final['participants'] else []
+            v['runs'] = [dict(x, ronda=r.get('ronda'), etapa=r.get('etapa')) for x, r in zip(v['runs'], g['runs'])]
             view_run = run or (final if g['status'] == 'done' else None)
             if view_run:
                 rr = {k: view_run.get(k) for k in ['key', 'kind', 'label', 'phase', 'participants', 'grid', 'skipped']}
@@ -858,7 +888,7 @@ class GrandPrix:
                 rr['remaining_ms'] = max(0, int((view_run['ends_at'] - now) * 1000)) if view_run.get('ends_at') and view_run['phase'] == 'running' else (0 if view_run.get('ends_at') else None)
                 rr['elapsed_ms'] = int((now - view_run['green_at']) * 1000) if view_run.get('green_at') and view_run['phase'] in ('running', 'finishing') else None
                 rr['deadline_ms'] = max(0, int((view_run['deadline'] - now) * 1000)) if view_run.get('deadline') and view_run['phase'] == 'finishing' else None
-                rr['target_laps'] = g['config']['final_laps'] if view_run['kind'] == 'final' else None
+                rr['target_laps'] = self.final_laps() if view_run['kind'] == 'final' else None
                 rr['stage_best'] = self.stage_best(view_run)
                 red = view_run.get('red')
                 rr['red'] = None
@@ -887,25 +917,29 @@ class GrandPrix:
         g = self.gp; buf = io.StringIO(); w = csv.writer(buf)
         name = {p['slot']: p['name'] for p in g['pilots']}; car = {p['slot']: p['car'] for p in g['pilots']}
         f2 = lambda x: '' if x is None else ('%.3f' % x)
-        w.writerow(['Puto el último · Gran Premio', time.strftime('%Y-%m-%d %H:%M', time.localtime(g['created_at']))])
+        w.writerow(['Puto el último · ' + ('Torneo por mangas' if self.es_torneo() else 'Gran Premio'), time.strftime('%Y-%m-%d %H:%M', time.localtime(g['created_at']))])
         c = g['config']
-        w.writerow(['Qualy min', c['quali_minutes'], 'Rondas', c['heats_rounds'], 'Min por ronda', c['heats_minutes'], 'Finalistas', c['finalists'], 'Vueltas final', c['final_laps'], 'Vuelta mínima (s)', self.min_lap_s(), 'Handicap (s por vuelta)', handicap_mod.resumen(self.handicap())])
         H = ['Clase', 'Handicap (s por vuelta)']
         hc = lambda r: [r.get('clase_txt', ''), '%.2f' % r.get('h_s', 0.0)]
-        if c['quali_enabled']:
-            w.writerow([]); w.writerow(['QUALY', 'Posición', 'Piloto', 'Coche', 'Mejor vuelta (s)', 'Vueltas válidas', 'Banderas amarillas', 'Estado', 'Vel. mejor (km/h)'] + H + ['Mejor vuelta con handicap (s)'])
-            for i, r in enumerate(self.quali_results()):
-                w.writerow(['', i + 1 if r['best'] is not None and not r['dsq'] else 'DSQ' if r['dsq'] else '', name[r['slot']], car[r['slot']], f2(r['best']), r['laps'],
-                            r.get('banderas', 0), 'DESCALIFICADO' if r['dsq'] else '', scale_kmh_txt(r['best'], c['track_length_m'], c['scale'])] + hc(r) + [f2(r.get('best_h'))])
-        if c['heats_rounds']:
-            w.writerow([]); w.writerow(['ELIMINATORIAS', 'Posición', 'Piloto', 'Coche', 'Vueltas totales', 'Mejor vuelta (s)'] + ['Ronda %d' % (i + 1) for i in range(c['heats_rounds'])] + ['Estado', 'Vel. mejor (km/h)'] + H + ['Mejor vuelta con handicap (s)', 'Tiempo total real (s)', 'Tiempo total con handicap (s)'])
-            for i, r in enumerate(self.heat_standings()): w.writerow(['', 'DSQ' if r['dsq'] else i + 1, name[r['slot']], car[r['slot']], r['laps'], f2(r['best'])] + r['rounds'] + ['DESCALIFICADO' if r['dsq'] else '', scale_kmh_txt(r['best'], c['track_length_m'], c['scale'])] + hc(r) + [f2(r.get('best_h')), f2(r.get('total')), f2(r.get('total_h'))])
-        final = g['runs'][-1]
-        if final['participants']:
-            w.writerow([]); w.writerow(['FINAL', 'Posición', 'Piloto', 'Coche', 'Vueltas', 'Mejor vuelta (s)', 'Salida en falso', 'Terminó', 'Banderas amarillas', 'Estado', 'Vel. última (km/h)', 'Vel. mejor (km/h)'] + H + ['Mejor vuelta con handicap (s)', 'Tiempo total real (s)', 'Tiempo total con handicap (s)', 'Orden real de cruce'])
-            for r in self.run_rows(final): w.writerow(['', 'DSQ' if r['dsq'] else r['pos'] or '', r['name'], r['car'], r['laps'], f2(r['best']), 'sí' if r['false_start'] else '', 'sí' if r['finished'] else '',
-                                                       r['banderas'], 'DESCALIFICADO' if r['dsq'] else '', scale_kmh_txt(r.get('last'), c['track_length_m'], c['scale']), scale_kmh_txt(r['best'], c['track_length_m'], c['scale'])]
-                                                      + hc(r) + [f2(r.get('best_h')), f2(r.get('total')), f2(r.get('total_h')), r.get('cruce_pos') or ''])
+        if self.es_torneo():
+            w.writerow(['Vuelta mínima (s)', self.min_lap_s(), 'Handicap (s por vuelta)', handicap_mod.resumen(self.handicap())])
+            self.torneo_csv(w, f2)
+        else:
+            w.writerow(['Qualy min', c['quali_minutes'], 'Rondas', c['heats_rounds'], 'Min por ronda', c['heats_minutes'], 'Finalistas', c['finalists'], 'Vueltas final', c['final_laps'], 'Vuelta mínima (s)', self.min_lap_s(), 'Handicap (s por vuelta)', handicap_mod.resumen(self.handicap())])
+            if c['quali_enabled']:
+                w.writerow([]); w.writerow(['QUALY', 'Posición', 'Piloto', 'Coche', 'Mejor vuelta (s)', 'Vueltas válidas', 'Banderas amarillas', 'Estado', 'Vel. mejor (km/h)'] + H + ['Mejor vuelta con handicap (s)'])
+                for i, r in enumerate(self.quali_results()):
+                    w.writerow(['', i + 1 if r['best'] is not None and not r['dsq'] else 'DSQ' if r['dsq'] else '', name[r['slot']], car[r['slot']], f2(r['best']), r['laps'],
+                                r.get('banderas', 0), 'DESCALIFICADO' if r['dsq'] else '', scale_kmh_txt(r['best'], c['track_length_m'], c['scale'])] + hc(r) + [f2(r.get('best_h'))])
+            if c['heats_rounds']:
+                w.writerow([]); w.writerow(['ELIMINATORIAS', 'Posición', 'Piloto', 'Coche', 'Vueltas totales', 'Mejor vuelta (s)'] + ['Ronda %d' % (i + 1) for i in range(c['heats_rounds'])] + ['Estado', 'Vel. mejor (km/h)'] + H + ['Mejor vuelta con handicap (s)', 'Tiempo total real (s)', 'Tiempo total con handicap (s)'])
+                for i, r in enumerate(self.heat_standings()): w.writerow(['', 'DSQ' if r['dsq'] else i + 1, name[r['slot']], car[r['slot']], r['laps'], f2(r['best'])] + r['rounds'] + ['DESCALIFICADO' if r['dsq'] else '', scale_kmh_txt(r['best'], c['track_length_m'], c['scale'])] + hc(r) + [f2(r.get('best_h')), f2(r.get('total')), f2(r.get('total_h'))])
+            final = g['runs'][-1]
+            if final['participants']:
+                w.writerow([]); w.writerow(['FINAL', 'Posición', 'Piloto', 'Coche', 'Vueltas', 'Mejor vuelta (s)', 'Salida en falso', 'Terminó', 'Banderas amarillas', 'Estado', 'Vel. última (km/h)', 'Vel. mejor (km/h)'] + H + ['Mejor vuelta con handicap (s)', 'Tiempo total real (s)', 'Tiempo total con handicap (s)', 'Orden real de cruce'])
+                for r in self.run_rows(final): w.writerow(['', 'DSQ' if r['dsq'] else r['pos'] or '', r['name'], r['car'], r['laps'], f2(r['best']), 'sí' if r['false_start'] else '', 'sí' if r['finished'] else '',
+                                                           r['banderas'], 'DESCALIFICADO' if r['dsq'] else '', scale_kmh_txt(r.get('last'), c['track_length_m'], c['scale']), scale_kmh_txt(r['best'], c['track_length_m'], c['scale'])]
+                                                          + hc(r) + [f2(r.get('best_h')), f2(r.get('total')), f2(r.get('total_h')), r.get('cruce_pos') or ''])
         # Bandera amarilla del piloto: cuántas pidió cada quien por parte, y quién quedó descalificado.
         fl = self.flag_cfg()
         w.writerow([]); w.writerow(['BANDERAS AMARILLAS DEL PILOTO (máximo %d por parte)' % fl['max'], 'Parte', 'Piloto', 'Coche', 'Banderas', 'Estado', 'Hora DSQ', 'Vueltas al DSQ', 'Cruces que ya no contaron'])
@@ -916,14 +950,14 @@ class GrandPrix:
                 d = run['data'].get(str(s)) or {}
                 if not d.get('banderas') and not d.get('dsq'): continue
                 anyf = True; q = d.get('dsq') or {}
-                w.writerow(['', run['label'], name[s], car[s], d.get('banderas', 0), 'DESCALIFICADO' if q else '', hora_f(q.get('at')), q.get('laps', '') if q else '', q.get('ignored', '') if q else ''])
+                w.writerow(['', run['label'], name[s], self.car_of(run, s), d.get('banderas', 0), 'DESCALIFICADO' if q else '', hora_f(q.get('at')), q.get('laps', '') if q else '', q.get('ignored', '') if q else ''])
         if not anyf: w.writerow(['', 'ninguna'])
         w.writerow([]); w.writerow(['VUELTAS', 'Parte', 'Piloto', 'Vuelta', 'Tiempo (s)', 'km/h escala', 'Válida'] + H + ['Tiempo con handicap (s)'])
         hcfg = self.handicap()
         for run in g['runs']:
             for s in run['participants'] or []:
-                hi = handicap_mod.info(hcfg, car[s])
-                for l in run['data'][str(s)]['laps']: w.writerow(['', run['label'], name[s], l['n'], f2(l['s']), l['kmh'], 'sí' if l['valid'] else 'anulada'] + hc(hi) + [f2(l['s'] + hi['h_s'])])
+                hi = handicap_mod.info(hcfg, self.car_of(run, s))
+                for l in run['data'][str(s)]['laps']: w.writerow(['', run['label'], name[s], l['n'], f2(l['s']), l['kmh'], 'sí' if l['valid'] else 'anulada'] + hc(hi) + [f2(handicap_mod.mas(l['s'], hi['h_s']))])
         if g.get('interrumpidas'):
             # Vueltas de partes cortadas por un reinicio del servidor (no cuentan para el resultado; se repitieron).
             w.writerow([]); w.writerow(['VUELTAS DE PARTES INTERRUMPIDAS (no cuentan)', 'Parte', 'Piloto', 'Vuelta', 'Tiempo (s)', 'km/h escala', 'Válida'])
@@ -947,7 +981,7 @@ class GrandPrix:
                 d = run['data'].get(str(s)) or {}
                 for i, x in enumerate(pits_mod.paradas_llantas(d.get('paradas'), km_lap), 1):
                     anyp = True
-                    w.writerow(['', run['label'], name[s], car[s], i, x.get('lap', ''), hora_p(x.get('entry_at')), hora_p(x.get('exit_at')),
+                    w.writerow(['', run['label'], name[s], self.car_of(run, s), i, x.get('lap', ''), hora_p(x.get('entry_at')), hora_p(x.get('exit_at')),
                                 '' if x.get('duration_s') is None else '%.1f' % x['duration_s'],
                                 '' if x.get('vida_entrada_pct') is None else x['vida_entrada_pct'],
                                 '' if x.get('vida_salida_pct') is None else x['vida_salida_pct'],
@@ -974,5 +1008,5 @@ class GrandPrix:
         with self.lock:
             run = self.current()
             if not run: return (None, [])
-            if run['kind'] == 'quali': return (run['phase'], [self.pilot(run['participants'][0])['car'] - 1])
-            return (run['phase'], [self.pilot(s)['car'] - 1 for s in run['participants'] if run['data'][str(s)]['finished_at'] is None])
+            if run['kind'] == 'quali': return (run['phase'], [self.car_of(run, run['participants'][0]) - 1])
+            return (run['phase'], [self.car_of(run, s) - 1 for s in run['participants'] if run['data'][str(s)]['finished_at'] is None])

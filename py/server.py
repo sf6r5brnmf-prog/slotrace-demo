@@ -11,6 +11,7 @@ from gp import GrandPrix, GPError, DEFAULTS as GP_DEFAULTS, flag_config as gp_fl
 import durable
 from instancia import InstanceLock
 import micoche
+import torneo as torneo_mod
 
 ROOT = Path(__file__).resolve().parent
 COLORS = [('Blanco','#edf2f7'),('Amarillo','#ffe23b'),('Rojo','#ff4d50'),('Azul','#3d96ff'),('Verde','#50dc92'),('Naranja','#ff963d')]
@@ -101,8 +102,25 @@ class Handler(BaseHTTPRequestHandler):
                 try:slot=int(raw)
                 except ValueError:slot=None
             elif 'piloto' in q:slot=micoche.slot_desde_parametro(roster,q['piloto'][0])
+            # Torneo por mangas: ?torneo=N (lugar del piloto en el torneo, no en el registro de 6).
+            tq=q.get('torneo',[None])[0];tslot=None
+            if tq is not None:
+                try:tslot=int(tq)
+                except ValueError:tslot=None
+            if tslot is not None:
+                gpo=self.server.gp
+                with gpo.lock:turno=gpo.torneo_mi_turno(tslot) if gpo.es_torneo() else None
+                return self.reply(200,micoche.vista_torneo(self.server.live.snapshot(include_sensor_data=False),gpo.snapshot(),tslot,turno))
             return self.reply(200,micoche.vista(roster,self.server.live.snapshot(include_sensor_data=False),self.server.gp.snapshot(),slot))
+        if path=='/api/micoche/torneo':
+            # Mi coche: solo la lista de pilotos del torneo activo (nombre, nivel, avatar) para elegir; nada más.
+            gpo=self.server.gp
+            with gpo.lock:
+                g=gpo.gp
+                t=None if not g or g.get('mode')!='torneo' or g.get('status')=='cancelled' else {'id':g['id'],'pilots':[{'slot':p['slot'],'name':p['name'],'nivel':p.get('nivel'),'avatar':p.get('avatar') or ''} for p in g['pilots']]}
+            return self.reply(200,{'torneo':t})
         if path=='/api/gp':return self.reply(200,self.server.gp.snapshot())
+        if path=='/api/inscritos':return self.reply(200,self.server.inscritos.read())
         if path=='/api/gp/config':return self.reply(200,self.server.gp.get_config())
         if path=='/api/scx':return self.reply(200,self.server.scx.debug())
         if path=='/api/gatillo':return self.reply(200,self.server.scx.gatillo_view())   # velocímetro en vivo + «pide cambio» (~10 por segundo)
@@ -137,7 +155,7 @@ class Handler(BaseHTTPRequestHandler):
         self.reply(404,{'error':'No se encontró esa página.'})
     def _post(self):
         route=urlsplit(self.path).path
-        if route not in ['/api/slot','/api/session','/api/gp','/api/gp/config','/api/sim','/api/vueltas-config','/api/scx/simular']: return self.reply(404,{'error':'Ruta desconocida.'})
+        if route not in ['/api/slot','/api/session','/api/gp','/api/gp/config','/api/sim','/api/vueltas-config','/api/scx/simular','/api/inscritos']: return self.reply(404,{'error':'Ruta desconocida.'})
         # Un sitio externo no puede escribir con un formulario o fetch sin CORS.
         origin=self.headers.get('Origin')
         if self.headers.get('X-Roster')!='1' or (origin and urlsplit(origin).netloc!=self.headers.get('Host')):
@@ -153,6 +171,9 @@ class Handler(BaseHTTPRequestHandler):
                     with LOCK:roster=self.server.store.read()
                     return self.reply(200,self.server.gp.command(payload,roster))
                 except GPError as e:return self.reply(e.status,{'error':str(e)})
+            if route=='/api/inscritos':
+                try:return self.reply(200,self.server.inscritos.write(payload))
+                except torneo_mod.TorneoError as e:return self.reply(e.status,{'error':str(e)})
             if route=='/api/vueltas-config':
                 return self.reply(200,self.server.lap_config.write(payload))
             if route=='/api/scx/simular':
@@ -288,6 +309,8 @@ def build_server(host,port,data,esp32_url,scx_port=None,scx_baud=57600,simulate=
         # UN SOLO lector SCX (solo lectura) para todo: Gran Premio y Práctica/Carrera.
         server.scx=SCX(port=scx_port,baud=scx_baud,simulate=simulate)
         server.gp=GrandPrix(data,server.scx,server.live)
+        # Torneo por mangas: pilotos inscritos con su nivel (data/inscritos.json).
+        server.inscritos=torneo_mod.Inscritos(Path(data));server.avisos.extend(server.inscritos.avisos)
         # ESP32 del sensor por cable USB (solo lectura, solo para la 💥 explosión al instante). Nunca la tarjeta SCX.
         usb_off=simulate or (isinstance(esp32_usb,str) and esp32_usb.strip().lower() in USB_OFF) or esp32_usb is False
         usb_port=None if usb_off or esp32_usb in (None,True) or str(esp32_usb).strip().lower()=='auto' else str(esp32_usb)

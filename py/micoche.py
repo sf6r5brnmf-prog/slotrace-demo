@@ -270,3 +270,37 @@ def vista(roster, live_snap, gp_snap, slot):
     if isinstance(out['datos'], dict):
         out['datos']['vida_llanta'] = out['datos'].get('fuel')   # mismo valor, en %: vida de llanta
     return out
+
+
+def vista_torneo(live_snap, gp_snap, tslot, turno):
+    """/api/micoche?torneo=N: un piloto del torneo por mangas (no está en el registro de 6). Solo lectura.
+    Además de su coche en vivo (cuando corre), dice cuándo le toca: manga, coche y cuántas mangas faltan."""
+    live_snap = live_snap or {}; gp_snap = gp_snap or {}
+    dash = dict(DASH_DEFAULTS); dash.update(live_snap.get('dashboard') or {})
+    out = {'boot': live_snap.get('boot') or gp_snap.get('boot'), 'avisos': live_snap.get('avisos') or gp_snap.get('avisos') or [],
+           'server_time': gp_snap.get('server_time'), 'dashboard': dash,
+           'scx': {'connected': bool((live_snap.get('scx') or {}).get('connected'))},
+           'piloto': None, 'estado': 'sin_piloto', 'sesion': None, 'datos': None, 'torneo': turno}
+    g = gp_snap.get('gp')
+    if not g or g.get('mode') != 'torneo' or g.get('status') == 'cancelled' or turno is None: return out
+    me = next((p for p in g['pilots'] if p['slot'] == tslot), None)
+    if me is None: return out
+    car = turno.get('car') or me.get('car') or 1
+    name, hexa = COLORS[(car - 1) % 6]
+    out['piloto'] = {'slot': tslot, 'torneo': True, 'name': me['name'], 'avatar': me.get('avatar') or '', 'revision': None,
+                     'color': hexa, 'color_name': (turno.get('nivel_txt') or name), 'nivel': me.get('nivel')}
+    cfg = g.get('config') or {}
+    for k in ('speed_max_kmh', 'fuel_red_pct', 'fuel_enabled', 'track_length_m', 'scale', 'lights_seconds', 'sound_enabled', 'sound_volume', 'tire_name', 'tire_red_pct'):
+        if k in cfg: dash[k] = cfg[k]
+    g2 = dict(g, pilots=[dict(p, car=(car if p['slot'] == tslot else p.get('car'))) for p in g['pilots']])
+    estado, sesion, datos = _vista_gp(g2, gp_snap, tslot, dash)
+    sesion['titulo'] = 'Torneo por mangas'
+    if estado in ('fuera', 'espera_turno', 'no_estas') or (g.get('status') == 'done' and estado == 'en_sesion' and turno.get('estado') != 'finalista' and turno.get('estado') != 'campeon'):
+        if turno.get('estado') == 'eliminado': estado = 'fuera'
+        elif g.get('status') == 'done': estado = 'fuera'
+        else: estado = 'espera_turno'
+        sesion['aviso'] = turno.get('texto') or sesion.get('aviso')
+    if isinstance(datos, dict):
+        datos['vida_llanta'] = datos.get('fuel'); datos['car'] = car
+    out.update(estado=estado, sesion=sesion, datos=datos)
+    return out

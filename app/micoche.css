@@ -51,3 +51,12 @@
 .mc-tire{margin-top:8px;border:1px solid #262d38;border-radius:12px;background:#0b0e13}
 .mc-tire .tire-warn{display:none!important}
 .mc-stat strong.mid{color:#ffc93c}.mc-stat strong.ok{color:#3ddc6a}
+
+/* Torneo por mangas: cuándo me toca */
+.mc-tq-h{grid-column:1/-1;margin:10px 0 0;font-size:17px;color:var(--muted)}
+.mc-turno{display:flex;flex-direction:column;gap:6px;margin:10px 0;padding:14px 16px;border-radius:14px;border:2px solid #3d8bfd;background:#101a2c}
+.mc-turno[hidden]{display:none}.mc-turno strong{font-size:20px;line-height:1.25}
+.mc-turno-tag{align-self:flex-start;font:900 12px system-ui;letter-spacing:.1em;padding:3px 8px;border-radius:6px;background:#3d8bfd;color:#fff}
+.mc-turno.ahora{border-color:var(--lime);background:#1d2a10}.mc-turno.ahora .mc-turno-tag{background:var(--lime);color:#11150b}
+.mc-turno.eliminado{border-color:#b3261e;background:#2a1416}.mc-turno.eliminado .mc-turno-tag{background:#b3261e}
+.mc-turno.campeon{border-color:#f5c542;background:#2a2410}.mc-turno.campeon .mc-turno-tag{background:#f5c542;color:#1a1400}

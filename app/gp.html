@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="es-MX"><head><script src="demo-shim.js?v=202611211027"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Gran Premio · Puto el último</title><link rel="stylesheet" href="style.css?v=202611211027"><link rel="stylesheet" href="gp.css?v=202611211027"><script src="avisos.js?v=202611211027" defer></script><script src="gatillo.js?v=202611211027" defer></script><script src="gauges.js?v=202611211027" defer></script><script src="lights.js?v=202611211027" defer></script><script src="paro.js?v=202611211027" defer></script><script src="explosion.js?v=202611211027" defer></script><script src="handicap.js?v=202611211027" defer></script><script src="gp.js?v=202611211027" defer></script></head>
+<html lang="es-MX"><head><script src="demo-shim.js?v=202611211124"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Gran Premio · Puto el último</title><link rel="stylesheet" href="style.css?v=202611211124"><link rel="stylesheet" href="gp.css?v=202611211124"><script src="avisos.js?v=202611211124" defer></script><script src="gatillo.js?v=202611211124" defer></script><script src="gauges.js?v=202611211124" defer></script><script src="lights.js?v=202611211124" defer></script><script src="paro.js?v=202611211124" defer></script><script src="explosion.js?v=202611211124" defer></script><script src="handicap.js?v=202611211124" defer></script><script src="torneo.js?v=202611211124" defer></script><script src="gp.js?v=202611211124" defer></script></head>
 <body class="gp-page"><main>
 <header class="gp-header"><div><p class="eyebrow">SLOTRACE / GRAN PREMIO</p><h1>Gran Premio</h1><p class="subtitle" id="gpSubtitle">Qualy · Eliminatorias · Final. Sin features: pura carrera.</p></div>
 <div class="gp-status"><a class="link-button" href="index.html">← Menú</a><a class="link-button" href="micoche.html">📱 Mi coche</a><span id="scxStatus" class="chip">SCX…</span><button type="button" id="soundToggle" class="chip-button">🔇 Activar sonido aquí</button><span id="connection" class="chip">Conectando…</span></div></header><div id="avisos" class="avisos" role="status" hidden></div>
 
 <section id="setupScreen" hidden>
-  <nav class="gp-tabs" role="tablist"><button type="button" class="tab active" data-tab="newTab">Nuevo Gran Premio</button><button type="button" class="tab" data-tab="configTab">Configuración</button><a class="tab" href="scx.html">Datos SCX (debug)</a></nav>
+  <nav class="gp-tabs" role="tablist"><button type="button" class="tab active" data-tab="newTab">Nuevo Gran Premio</button><button type="button" class="tab" data-tab="torneoTab">🏆 Torneo por mangas (7+)</button><button type="button" class="tab" data-tab="configTab">Configuración</button><a class="tab" href="scx.html">Datos SCX (debug)</a></nav>
   <div id="newTab" class="tab-body">
     <h2 class="gp-h2">1 · Formato</h2>
     <div class="presets" id="presetButtons"></div>
@@ -16,6 +16,21 @@
     <div id="pilotPick" class="pilot-pick"></div>
     <p id="setupError" class="error" role="alert"></p>
     <div class="setup-actions"><button type="button" class="primary big" id="createGp">Arrancar Gran Premio →</button></div>
+  </div>
+  <div id="torneoTab" class="tab-body" hidden>
+    <h2 class="gp-h2">1 · Formato del torneo</h2>
+    <div id="tqConfig" class="tq-config"></div>
+    <p class="muted" id="tqFormat"></p>
+    <h2 class="gp-h2">2 · Inscripción <small id="tqCount" class="muted"></small></h2>
+    <p class="muted">Escribe el nombre, elige su nivel y aprieta «Inscribir». El nivel sirve para que las mangas sean parejas. Toca el nombre para corregirlo; N / I / E cambia el nivel.</p>
+    <form id="tqAdd" class="tq-add" autocomplete="off"><input id="tqName" placeholder="Nombre del piloto" maxlength="24" aria-label="Nombre del piloto"><span id="tqAddLvl"></span><button type="submit" class="primary">+ Inscribir</button></form>
+    <div class="tq-tools"><button type="button" id="tqRoster">Agregar pilotos registrados</button><button type="button" id="tqClear">Borrar lista</button></div>
+    <ol id="tqList" class="tq-list"></ol>
+    <p id="tqWarn" class="tq-warn" role="status"></p>
+    <h2 class="gp-h2">3 · Así quedaría</h2>
+    <div id="tqPreview" class="tq-preview"></div>
+    <p id="tqError" class="error" role="alert"></p>
+    <div class="setup-actions"><button type="button" class="primary big" id="tqCreate">Arrancar torneo →</button></div>
   </div>
   <div id="configTab" class="tab-body" hidden>
     <form id="configForm" class="config-grid"></form>

@@ -6,6 +6,8 @@ const COLORS=['#edf2f7','#ffe23b','#ff4d50','#3d96ff','#50dc92','#ff963d'],TEAM=
 let state=null,roster=null,lastVersion=null,screenName='',busy=false,picked=new Set(),carPick={},pickInit=false,configDraft=null;
 function toast(t){const b=$('toast');b.textContent=t;b.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>b.style.display='none',3800);}
 const fmt=s=>s==null?'—':s.toFixed(2)+' s';
+// Color del equipo: en el Gran Premio es el lugar del registro (0–5); en el torneo, el COCHE que trae en esta manga.
+function teamIdx(slot,car){const g=state?.gp;if(g&&g.mode==='torneo'){const c=car||(g.pilots.find(x=>x.slot===slot)||{}).car||1;return (c-1)%6;}return slot;}
 function clock(ms){if(ms==null)return'--:--';const t=Math.ceil(ms/1000),m=Math.floor(t/60),s=t%60;return m+':'+String(s).padStart(2,'0');}
 async function post(url,body){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','X-Roster':'1'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw Error(d.error||'No se pudo.');return d;}
 
@@ -45,11 +47,12 @@ function handleEvents(g){
     else if(e.type==='podium')play('aplausos');
     else if(e.type==='red_flag'||e.type==='yellow_flag')play('frenazo');
     else if(e.type==='dsq'){play('abucheo');toast('⛔ '+(e.name||'')+' DESCALIFICADO');}
+    else if(e.type==='eliminado')play('abucheo');
   });
   lastEvent=Math.max(lastEvent,max);
 }
 function tick(e){
-  const map={lap:'⏱',best:'★',false_start:'⚠',suspicious:'⚠',winner:'🏁',finish:'🏁',go:'🟢',countdown:'🚦',podium:'🏆',last_lap:'⏳',quali_done:'✔',final_done:'🏁',red_flag:'🚩',yellow_flag:'🟨',dsq:'⛔',pit_entry:'🔧',pit_exit:'🔧'};
+  const map={lap:'⏱',best:'★',false_start:'⚠',suspicious:'⚠',winner:'🏁',finish:'🏁',go:'🟢',countdown:'🚦',podium:'🏆',last_lap:'⏳',quali_done:'✔',final_done:'🏁',red_flag:'🚩',yellow_flag:'🟨',dsq:'⛔',pit_entry:'🔧',pit_exit:'🔧',eliminado:'❌'};
   if(e.type==='lap')return;
   const t=$('ticker'),row=el('div','tick tick-'+e.type,(map[e.type]||'•')+' '+(e.name?e.name+' · ':'')+e.text);t.prepend(row);while(t.children.length>4)t.lastChild.remove();
 }
@@ -67,6 +70,7 @@ const SECTIONS=[
  ['Tablero',[['fuel_enabled','Mostrar vida de llanta','bool'],['tire_name','Llanta (nombre o tipo que sale en las tarjetas)','text'],['tire_red_pct','Zona roja de la llanta (%) · abajo de esto: CAMBIA LLANTAS / ENTRA A PITS','num',1],['track_length_m','Largo de la pista (m)','num',.1],['scale','Escala (1:N)','num',1],['speed_max_kmh','Velocímetro hasta (km/h)','num',10],['fuel_layout','Acomodo de bytes de la vida de llanta (D6 de la Pit Box)','sel',[['nibbles','D0–D2 por nibbles (slotbaer)'],['nibbles_bajo','D0–D2 nibble bajo primero'],['bytes','D0–D5 un byte por coche']]]]],
  ['Sonido',[['sound_enabled','Sonidos encendidos','bool'],['sound_volume','Volumen (0–100)','num',5]]],
  ['Bandera amarilla del piloto (también en Práctica y Carrera)',[['pilot_flag_enabled','Un piloto puede sacar bandera amarilla con clics seguidos en su botón de cambio de carril','bool'],['pilot_flag_clicks','Clics seguidos para sacarla','num',1],['pilot_flag_window_s','En cuántos segundos (todos los clics)','num',.1],['pilot_flag_max','Máximo de banderas por piloto en cada carrera (Práctica, Carrera, cada qualy, cada ronda y la final)','num',1],['pilot_flag_dsq','Descalificar al que pida una más del máximo','bool']]],
+ ['Torneo por mangas (7 o más pilotos)',[['torneo_cars','Coches por manga (2 a 6 · con 6 necesitas las dos centralitas)','num',1],['torneo_minutes','Minutos por manga (se suman vueltas)','num',.25],['torneo_agrupar','Cómo se arman las mangas','sel',[['nivel','Agrupar por nivel: expertos con expertos, novatos con novatos (recomendado)'],['mezcla','Mezclar niveles en cada manga (serpentina)']]],['torneo_final_laps','Vueltas de la final (cuando es una sola carrera de 6)','num',1]]],
  ['Tiempo en pits · cambio de llantas (también en Práctica y Carrera)',[['pit_exit_source','Cómo se marca la salida de pits (la entrada la dice la Pit Box al cruzar por el carril)','sel',[['estimado','Estimada: cuando la llanta deja de subir en la Pit Box y acelera'],['auto','Automática: sensor IR de salida si lo hay; si no, estimada'],['ir','Solo el sensor IR de la salida de pits (cuando lo pongas)']]],['pit_exit_throttle','Gatillo que cuenta como que ya salió (0–15)','num',1],['pit_exit_low_throttle','Gatillo que cuenta como detenido en pits (0–15)','num',1],['pit_exit_fuel_idle_s','Segundos sin que suba la vida de llanta para dar por terminado el cambio','num',.1],['pit_exit_throttle_hold_s','Segundos con el gatillo arriba para confirmar la salida','num',.05],['pit_exit_timeout_s','Tope de tiempo en pits (s): si no sale, se cierra sola','num',1]]],
 ];
 function renderConfig(cfg){
@@ -92,14 +96,14 @@ function readHandicap(){const seg={};let bad=false;$('configForm').querySelector
   if(bad)throw Error('El ajuste por vuelta debe ser un número de 0 a 10 segundos (el botón + / − elige si suma o resta).');return {enabled:$('hcEnabled').checked,seg};}
 async function saveHandicap(part){const d=await post('/api/vueltas-config',{handicap:part});if(state)state.handicap_cfg=d.handicap;return d.handicap;}
 function readConfig(){const out={};$('configForm').querySelectorAll('[data-key]').forEach(i=>{const k=i.dataset.key;out[k]=i.dataset.type==='bool'?i.checked:i.dataset.type==='sel'||i.dataset.type==='text'?i.value:Number(i.value);});
-  ['heats_rounds','finalists','final_laps','final_wait_s','lights_seconds','false_start_penalty_laps','false_start_throttle','scale','speed_max_kmh','fuel_red_pct','tire_red_pct','sound_volume','pilot_flag_clicks','pilot_flag_max'].forEach(k=>{if(k in out)out[k]=Math.round(out[k]);});out.preset='personal';return out;}
+  ['torneo_cars','torneo_final_laps','heats_rounds','finalists','final_laps','final_wait_s','lights_seconds','false_start_penalty_laps','false_start_throttle','scale','speed_max_kmh','fuel_red_pct','tire_red_pct','sound_volume','pilot_flag_clicks','pilot_flag_max'].forEach(k=>{if(k in out)out[k]=Math.round(out[k]);});out.preset='personal';return out;}
 $('saveConfig').addEventListener('click',async()=>{try{const hc=readHandicap();const d=await post('/api/gp/config',{config:readConfig()});await saveHandicap(hc);state.config=d.config;renderConfig(d.config);renderSetup(true);$('configMsg').textContent='Guardado ✓';toast('Configuración guardada');}catch(e){$('configMsg').textContent=e.message;}});
 $('resetConfig').addEventListener('click',async()=>{if(!confirm('¿Regresar todo a los valores de fábrica? (se conserva la asignación de coches)'))return;try{const d=await post('/api/gp/config',{reset_defaults:true});await saveHandicap({enabled:true,seg:{sin_iman:0,con_iman:0.5,modificado:1}});state.config=d.config;renderConfig(d.config);renderSetup(true);$('configMsg').textContent='Valores de fábrica ✓';}catch(e){$('configMsg').textContent=e.message;}});
 SFX.forEach(n=>{const b=el('button','',n.replace('_',' '));b.type='button';b.addEventListener('click',()=>{if(!soundDevice||!soundUnlocked){$('soundToggle').click();}play(n);});$('sfxTest').append(b);});
 // 💥 Explosión al sensor (sintetizada en explosion.js): mismo interruptor y volumen que los demás sonidos.
 if(window.PeluExplosion){PeluExplosion.config({canPlay:()=>soundDevice&&soundUnlocked,volume});
   const xb=el('button','','💥 explosión');xb.type='button';xb.addEventListener('click',()=>{if(!soundDevice||!soundUnlocked){$('soundToggle').click();}PeluExplosion.test();});$('sfxTest').append(xb);}
-document.querySelectorAll('.tab[data-tab]').forEach(t=>t.addEventListener('click',()=>{document.querySelectorAll('.tab[data-tab]').forEach(x=>x.classList.toggle('active',x===t));['newTab','configTab'].forEach(id=>$(id).hidden=id!==t.dataset.tab);if(t.dataset.tab==='configTab')renderConfig(state.config);}));
+document.querySelectorAll('.tab[data-tab]').forEach(t=>t.addEventListener('click',()=>{document.querySelectorAll('.tab[data-tab]').forEach(x=>x.classList.toggle('active',x===t));['newTab','configTab','torneoTab'].forEach(id=>$(id).hidden=id!==t.dataset.tab);if(t.dataset.tab==='configTab')renderConfig(state.config);if(t.dataset.tab==='torneoTab'&&window.PeluTorneo)PeluTorneo.renderSetup(true);}));
 
 /* ---------------- Preparación ---------------- */
 function formatText(c){
@@ -158,7 +162,9 @@ $('btnClose').addEventListener('click',()=>act('close'));
 
 const KIND={quali:'QUALY',heat:'ELIMINATORIAS',final:'FINAL'};
 function renderStepper(g){
-  const st=$('stepper');st.replaceChildren();
+  const st=$('stepper');
+  if(g.mode==='torneo'&&window.PeluTorneo){PeluTorneo.stepper(g,st);return;}
+  st.replaceChildren();
   const groups=[];g.runs.forEach((r,i)=>{let last=groups[groups.length-1];if(!last||last.kind!==r.kind){last={kind:r.kind,runs:[]};groups.push(last);}last.runs.push(i);});
   groups.forEach(gr=>{const li=el('li','step');const cur=gr.runs.includes(g.current)&&g.status==='active',done=g.status==='done'||gr.runs.every(i=>g.runs[i].phase==='done');
     li.classList.toggle('current',cur);li.classList.toggle('done',done&&!cur);
@@ -168,11 +174,13 @@ function cardFor(slot){
   const dash=$('dash');let card=dash.querySelector('[data-slot="'+slot+'"]');
   const hon=!!state.gp?.handicap?.on;
   if(card&&card.dataset.hon!==String(hon)){gauges.delete(slot);card.remove();card=null;}
+  const pcar=String((state.gp.pilots.find(x=>x.slot===slot)||{}).car);   // torneo: el mismo piloto puede traer otro coche en la siguiente manga
+  if(card&&card.dataset.car!==pcar){gauges.delete(slot);card.remove();card=null;}
   if(card&&(!card.querySelector('[data-k="last"] .greal')||!card.querySelector('[data-k="last"] .gkmh')||!card.querySelector('[data-k="best"] .gkmh')||!card.querySelector('.gtire'))){gauges.delete(slot);card.remove();card=null;}
   if(!card){
-    const p=state.gp.pilots.find(x=>x.slot===slot);card=el('article','gcard');card.dataset.slot=slot;card.dataset.hon=String(hon);card.style.setProperty('--team',COLORS[slot]);
+    const p=state.gp.pilots.find(x=>x.slot===slot);card=el('article','gcard');card.dataset.slot=slot;card.dataset.hon=String(hon);card.dataset.car=pcar;card.style.setProperty('--team',COLORS[teamIdx(slot)]);
     const top=el('div','gtop');const pos=el('div','gpos','—');const img=el('img','gav');img.src=p.avatar;img.alt='';
-    const nm=el('div','gname'),pide=el('span','pide sin','⇄');pide.dataset.car=p.car;pide.setAttribute('role','status');const fl=el('span','gflags');fl.title='Banderas amarillas que pidió en esta parte (triple clic en su botón de cambio de carril)';const hcl=el('span','hclase',hon&&p.clase?PeluHandicap.label(p.clase,p.h_s):'');hcl.hidden=!(hon&&p.clase);nm.append(el('strong','',p.name),el('small','','Coche '+p.car+' · '+TEAM[slot]),hcl,pide,fl);
+    const nm=el('div','gname'),pide=el('span','pide sin','⇄');pide.dataset.car=p.car;pide.setAttribute('role','status');const fl=el('span','gflags');fl.title='Banderas amarillas que pidió en esta parte (triple clic en su botón de cambio de carril)';const hcl=el('span','hclase',hon&&p.clase?PeluHandicap.label(p.clase,p.h_s):'');hcl.hidden=!(hon&&p.clase);nm.append(el('strong','',p.name),el('small','','Coche '+p.car+' · '+TEAM[teamIdx(slot)]+(p.nivel&&window.PeluTorneo?' · '+PeluTorneo.nivelTxt(p.nivel):'')),hcl,pide,fl);
     const badge=el('span','gbadge');top.append(pos,img,nm,badge);
     const cv=el('canvas','gcanvas');const stats=el('div','gstats');
     [['Vueltas','laps'],['Última','last'],['Mejor','best']].forEach(([l,k])=>{const b=el('div');b.append(el('span','',l),el('strong','','—'));b.dataset.k=k;if(k!=='laps'){const real=el('small','greal');real.hidden=true;const kmh=el('small','gkmh');kmh.hidden=true;b.append(real,kmh);}stats.append(b);});
@@ -262,7 +270,9 @@ function susText(list,total,min){
 function susTitle(list){return (list||[]).slice(-20).reverse().map(x=>Number(x.s).toFixed(2)+' s · '+(x.hora?new Date(x.hora*1000).toLocaleTimeString('es-MX'):'')+' · '+(SRC[x.src]||x.src||'')+(x.car?' · coche '+x.car:'')).join('\n');}
 function table(title,head,rows){const box=el('div','tbox');box.append(el('h3','',title));const t=el('table'),th=el('tr');head.forEach(h=>th.append(el('th','',h)));const thead=el('thead');thead.append(th);const tb=el('tbody');rows.forEach(r=>{const tr=el('tr');r.forEach(v=>tr.append(el('td','',v)));tb.append(tr);});t.append(thead,tb);box.append(t);return box;}
 function renderTables(g,target){
-  const name=s=>g.pilots.find(p=>p.slot===s).name,box=$(target);box.replaceChildren();
+  const name=s=>g.pilots.find(p=>p.slot===s).name,box=$(target);
+  if(g.mode==='torneo'&&window.PeluTorneo){PeluTorneo.tables(g,box);return;}
+  box.replaceChildren();
   // Handicap: columnas extra con el tiempo ajustado (H) y la clase de cada coche.
   const hon=!!g.handicap?.on,hn=r=>hon&&r.clase?' · '+PeluHandicap.label(r.clase,r.h_s):'',fh=x=>x==null?'—':x.toFixed(2)+' s H';
   if(g.final.length&&g.runs[g.runs.length-1].phase!=='ready')box.append(table('Final'+(hon?' · con handicap (vueltas, luego tiempo total ajustado)':''),hon?['Pos','Piloto','Vueltas','Mejor','Mejor (H)','Total (H)']:['Pos','Piloto','Vueltas','Mejor'],g.final.map(r=>[r.dsq?'DSQ':r.pos??'—',r.name+(r.false_start?' ⚠':'')+(r.dsq?' · DESCALIFICADO':'')+hn(r),r.laps,fmt(r.best)].concat(hon?[fh(r.best_h),fh(r.total_h)]:[]))));
@@ -293,7 +303,8 @@ function renderRace(g){
   $('clock').classList.toggle('paro',!!run.red);
   $('btnStart').hidden=run.phase!=='ready';$('btnEnd').hidden=!['running','finishing','countdown','red'].includes(run.phase);
   $('btnRepeat').hidden=run.phase==='ready';$('btnSkip').hidden=!(run.kind==='quali'&&run.phase==='ready');$('btnNext').hidden=run.phase!=='done';
-  $('btnNext').textContent=g.current+1>=g.runs.length?'Ver podio 🏆':'Siguiente: '+g.runs[g.current+1].label+' →';
+  $('btnNext').textContent=g.mode==='torneo'&&window.PeluTorneo?PeluTorneo.nextLabel(g):g.current+1>=g.runs.length?'Ver podio 🏆':'Siguiente: '+g.runs[g.current+1].label+' →';
+  if(window.PeluTorneo)PeluTorneo.renderRace(g);
   setText($('gpNotice'),g.notice||'');
   renderDash(g);renderTables(g,'tables');renderLights(g);
   PeluParo.render({canStop:['running','finishing','countdown'].includes(run.phase),red:!!run.red,resuming,n:run.red?.n,
@@ -304,7 +315,8 @@ PeluParo.onStop=async()=>{if(!state?.gp)return;apply(await post('/api/gp',{actio
 PeluParo.onResume=async()=>{if(!state?.gp)return;apply(await post('/api/gp',{action:'resume',id:state.gp.id}));};
 function renderDone(g){
   const pod=$('podium');pod.replaceChildren();const top=g.final.filter(r=>!r.dsq).slice(0,3);   // un descalificado no sube al podio
-  [1,0,2].forEach(i=>{const r=top[i];if(!r)return;const b=el('div','pod pod'+(i+1));b.style.setProperty('--team',COLORS[r.slot]);const img=el('img');img.src=r.avatar;img.alt='';b.append(img,el('strong','',r.name),el('span','',['🥇','🥈','🥉'][i]+' P'+(i+1)+' · '+r.laps+' v · '+(g.handicap?.on?'total '+(r.total_h==null?'—':r.total_h.toFixed(2)+' s')+' H · '+PeluHandicap.label(r.clase,r.h_s):'mejor '+fmt(r.best))));pod.append(b);});
+  [1,0,2].forEach(i=>{const r=top[i];if(!r)return;const b=el('div','pod pod'+(i+1));b.style.setProperty('--team',COLORS[teamIdx(r.slot,r.car)]);const img=el('img');img.src=r.avatar;img.alt='';b.append(img,el('strong','',r.name),el('span','',['🥇','🥈','🥉'][i]+' P'+(i+1)+' · '+r.laps+' v · '+(g.handicap?.on?'total '+(r.total_h==null?'—':r.total_h.toFixed(2)+' s')+' H · '+PeluHandicap.label(r.clase,r.h_s):'mejor '+fmt(r.best))));pod.append(b);});
+  if(window.PeluTorneo)PeluTorneo.renderDone(g);
   const hb=$('podiumHandicap');if(hb){hb.hidden=!g.handicap?.on;hb.textContent=g.handicap?.on?'Con handicap · H = tiempo real + ajuste por vuelta ('+g.handicap.resumen+'). El orden real de cruce está en el CSV.':'';}
   renderTables(g,'doneTables');
 }
@@ -313,8 +325,8 @@ function apply(data){
   state=data;const g=data.gp;
   const sc=data.scx,chip=$('scxStatus');chip.textContent=sc.connected?('● SCX '+(sc.simulated?'simulada':'conectada')+(sc.fuel_consumo===false?' · desgaste de llanta apagado en Pit Box':'')):'● SCX sin datos';chip.className='chip '+(sc.connected?'ok':'bad');chip.title=sc.error||sc.port||'';
   handleEvents(g);
-  if(!g||g.status==='cancelled'){show('setup');renderSetup(false);$('gpSubtitle').textContent='Qualy · Eliminatorias · Final. Sin features: pura carrera.';PeluLights.hide();PeluParo.hide();return;}
-  $('gpSubtitle').textContent=formatText(g.config);
+  if(!g||g.status==='cancelled'){show('setup');renderSetup(false);if(window.PeluTorneo)PeluTorneo.renderSetup(false);$('gpSubtitle').textContent='Qualy · Eliminatorias · Final. Sin features: pura carrera.';PeluLights.hide();PeluParo.hide();return;}
+  $('gpSubtitle').textContent=g.mode==='torneo'&&window.PeluTorneo?PeluTorneo.formatText(g):formatText(g.config);
   if(g.status==='done'){show('done');if(lastVersion!==g.version)renderDone(g);lastVersion=g.version;PeluLights.hide();PeluParo.hide();return;}
   show('race');renderRace(g);lastVersion=g.version;
 }

@@ -58,7 +58,8 @@ def set_speed(x):
     time.time = lambda: w0 + (rw() - w0) * x
 def demo_defaults():
     """Primera vez: un Gran Premio cortito para enseñarlo (se cambia en Configuración)."""
-    srv.gp.set_config({'config': {'preset': 'personal', 'quali_minutes': 1, 'heats_rounds': 1, 'heats_minutes': 1.5, 'final_laps': 5, 'final_wait_s': 20}})
+    srv.gp.set_config({'config': {'preset': 'personal', 'quali_minutes': 1, 'heats_rounds': 1, 'heats_minutes': 1.5, 'final_laps': 5, 'final_wait_s': 20,
+                                  'torneo_minutes': 1, 'torneo_final_laps': 5}})
     # Handicap de ejemplo para enseñarlo: coche 2 con imán (+0.5 s por vuelta) y coche 4 modificado (+1 s). Se cambia en el menú.
     srv.lap_config.write({'handicap': {'enabled': True, 'clases': {'2': 'con_iman', '4': 'modificado'}}})
 def _fix_modes(d):
@@ -82,6 +83,12 @@ def _sim_step(self):
     if self.follow:
         phase, cars = self.follow()
         if phase == 'countdown' and self.false_start_next and cars: self._fs_car = cars[0]; self.false_start_next = False
+        # Torneo (solo DEMO): en cada manga los coches cambian de ritmo, para que no pierda siempre el mismo número de coche.
+        if phase == 'countdown' and getattr(self, '_tq_phase', None) != 'countdown':
+            try:
+                if srv.gp.es_torneo(): self.base = [round(self.rng.uniform(10.4, 12.0), 2) for _ in range(6)]
+            except Exception: pass
+        self._tq_phase = phase
         if phase != 'countdown': self._fs_car = None
         self.set_running(cars if phase in ('running', 'finishing') else [])
     fs_car = self._fs_car; out = b''

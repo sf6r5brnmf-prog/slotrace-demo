@@ -1,8 +1,8 @@
 'use strict';
 // Contenedor de la DEMO: arranca el servidor real (Python) dentro del navegador y muestra la app real en un iframe.
 (function(){
-const V='202611211027';
-const PY=['durable.py','instancia.py','handicap.py','pits.py','gatillo.py','scx.py','live.py','gp.py','micoche.py','esp32usb.py','server.py','demo_glue.py'];
+const V='202611211124';
+const PY=['durable.py','instancia.py','handicap.py','torneo.py','pits.py','gatillo.py','scx.py','live.py','gp.py','micoche.py','esp32usb.py','server.py','demo_glue.py'];
 const NAMES=['Ernesto','Pepe','Lalo','Mica'];
 const PAGES=['index.html','gp.html','micoche.html','scx.html'];
 const COLORS=[['Blanco','#edf2f7'],['Amarillo','#ffe23b'],['Rojo','#ff4d50'],['Azul','#3d96ff'],['Verde','#50dc92'],['Naranja','#ff963d']];
@@ -106,6 +106,15 @@ $('demoChip').addEventListener('click',()=>{buildCars();$('demoMenu').hidden=fal
 $('dmClose').addEventListener('click',()=>$('demoMenu').hidden=true);
 $('demoMenu').addEventListener('click',e=>{if(e.target===$('demoMenu'))$('demoMenu').hidden=true;});
 $('dmFalse').addEventListener('click',async()=>{try{await post('/api/sim',{false_start:true});msg('En el próximo semáforo un coche sale antes del verde.');}catch(e){msg(e.message);}});
+// Torneo: 12 pilotos de ejemplo (3 expertos, 5 intermedios, 4 novatos) y mangas de 1 minuto para enseñarlo rápido.
+const TORNEO_DEMO=[['Ernesto','experto'],['Pepe','experto'],['Lalo','intermedio'],['Mica','novato'],['Javi','experto'],['Kike','intermedio'],['Memo','intermedio'],['Paco','novato'],['Toño','intermedio'],['Beto','novato'],['Chuy','intermedio'],['Rafa','novato']];
+$('dmTorneo').addEventListener('click',async()=>{
+  try{await post('/api/inscritos',{pilotos:TORNEO_DEMO.map(([name,nivel])=>({name,nivel}))});
+    await post('/api/gp/config',{config:{torneo_cars:3,torneo_minutes:1,torneo_final_laps:5,preset:'personal'}});
+    msg('Listo: 12 pilotos inscritos, mangas de 1 min. Abriendo Gran Premio → Torneo por mangas…');
+    const f=$('app');setTimeout(()=>{$('demoMenu').hidden=true;try{f.contentWindow.location.href=new URL('gp.html?tab=torneo',f.contentWindow.location.href).href;}catch(e){}},900);
+  }catch(e){msg(e.message);}
+});
 $('dmReset').addEventListener('click',async()=>{
   if(!confirm('¿Restablecer la demo? Se borran los pilotos, la configuración y las carreras de este equipo, y vuelven los pilotos de ejemplo.'))return;
   stopped=true;clearInterval(ticker);clearInterval(saver);

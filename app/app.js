@@ -14,10 +14,32 @@ function render(){
     if(pilot){const img=element('img','portrait');img.src=avatarSrc(pilot.avatar);img.alt='Avatar de piloto: '+pilot.name;card.append(img);}
     else{const art=element('div','empty-art');art.append(element('strong','','+'),element('span','','Tu lugar en la parrilla'));card.append(art);}
     const bottom=element('div','card-bottom'),btn=element('button','',pilot?'Editar':'Agregar');btn.type='button';btn.addEventListener('click',()=>openEditor(i));
-    bottom.append(element('h2','',pilot?pilot.name:'Lugar libre'),btn);card.append(bottom);board.append(card);
+    bottom.append(element('h2','',pilot?pilot.name:'Lugar libre'),btn);card.append(bottom);
+    if(pilot)card.append(nivelBox(pilot,i));
+    board.append(card);
   });
   syncMenuRoster();
 }
+// Nivel del piloto (Novato / Intermedio / Experto) y «Nivel sugerido» por sus tiempos (ver handicap.py).
+function nivelBox(p,i){
+  const nv=p.nivel||'intermedio',box=element('div','nivel-box');
+  box.append(element('span','nivel-chip nv-'+nv,PeluHandicap.NIVEL_ICON[nv]+' '+PeluHandicap.nivelTxt(nv)));
+  const sg=p.sugerido,ch=p.nivel_cambio;
+  if(sg&&sg.nivel!==nv){const s=element('div','nivel-sug');s.append(element('span','','Nivel sugerido: '),element('b','',PeluHandicap.NIVEL_ICON[sg.nivel]+' '+PeluHandicap.nivelTxt(sg.nivel)),element('small','',PeluHandicap.sugTxt(sg).replace(/^[^·]+· /,'')));
+    const ok=element('button','primary small','Aceptar');ok.type='button';ok.addEventListener('click',()=>setNivel(i,sg.nivel));
+    const no=element('button','small','✕');no.type='button';no.setAttribute('aria-label','Descartar sugerencia');no.addEventListener('click',()=>setNivel(i,null));
+    s.append(ok,no);box.append(s);}
+  else if(ch){const s=element('div','nivel-sug cambio');s.append(element('span','','Cambió solo: '+PeluHandicap.nivelTxt(ch.de)+' → '),element('b','',PeluHandicap.nivelTxt(ch.nivel)),element('small','',PeluHandicap.sugTxt(ch).replace(/^[^·]+· /,'')));
+    const no=element('button','small','OK');no.type='button';no.addEventListener('click',()=>setNivel(i,null));s.append(no);box.append(s);}
+  return box;
+}
+async function setNivel(i,nivel){
+  try{const r=await fetch('/api/slot',{method:'POST',headers:{'Content-Type':'application/json','X-Roster':'1'},body:JSON.stringify(nivel?{slot:i,action:'nivel',nivel}:{slot:i,action:'nivel_descartar'})});
+    const d=await r.json();if(!r.ok)throw Error(d.error||'No se pudo guardar.');await poll();if(nivel)notify('Nivel guardado: '+PeluHandicap.nivelTxt(nivel)+'.');}
+  catch(e){notify(e.message||'No hay conexión con la Mac.');}
+}
+let editNivel='intermedio';
+function renderNivelPick(){const b=$('nivelPick');if(!b)return;b.replaceChildren(PeluHandicap.nivelPicker(editNivel,k=>{editNivel=k;renderNivelPick();if(existing||photo)$('save').disabled=false;}));}
 async function poll(){
   if(polling)return;polling=true;
   try{
@@ -100,6 +122,7 @@ async function choosePhoto(event){
 }
 async function openEditor(i){
   if(!roster)return;const pilot=roster.slots[i];previousFocus=document.activeElement;slot=i;expected=pilot?pilot.revision:null;photo=null;existing=null;photoChanged=false;const job=++photoJob;
+  editNivel=pilot&&pilot.nivel||'intermedio';renderNivelPick();
   $('name').value=pilot?pilot.name:'';$('error').textContent='';$('zoom').value='1';$('vertical').value='0';$('horizontal').value='0';$('adjustments').hidden=true;$('remove').hidden=!pilot;
   $('modalTitle').textContent=pilot?'Editar piloto':'Agregar piloto';$('teamLabel').textContent='Lugar '+(i+1)+' · Equipo '+roster.colors[i].name;$('overlay').style.setProperty('--team',roster.colors[i].hex);$('overlay').hidden=false;document.body.classList.add('modal-open');$('save').disabled=!!pilot;drawAvatar();$('name').focus();
   if(pilot){try{const im=await loadImage(avatarSrc(pilot.avatar));if(job!==photoJob)return;existing=im;preview();}catch(e){$('error').textContent='No se pudo cargar el avatar. Elige otra foto.';}finally{if(job===photoJob)$('save').disabled=false;}}
@@ -109,7 +132,7 @@ async function mutate(action){
   if(saving)return;if(action==='save'&&!existing&&!photo){$('error').textContent='Toma una selfie o elige una foto del rostro.';return;}
   saving=true;$('save').disabled=true;$('remove').disabled=true;$('error').textContent='';
   try{const body={slot,expectedRevision:expected,action};
-    if(action==='save'){body.name=$('name').value.trim();if(photoChanged){drawAvatar();body.image=canvas.toDataURL('image/png');}}
+    if(action==='save'){body.name=$('name').value.trim();body.nivel=editNivel;if(photoChanged){drawAvatar();body.image=canvas.toDataURL('image/png');}}
     const response=await fetch('/api/slot',{method:'POST',headers:{'Content-Type':'application/json','X-Roster':'1'},body:JSON.stringify(body)});const result=await response.json();if(!response.ok)throw Error(result.error||'No se pudo guardar.');
     saving=false;closeEditor();await poll();notify(action==='remove'?'Piloto eliminado. Lugar disponible.':'Piloto guardado. Ya se ve en la parrilla.');
   }catch(e){$('error').textContent=e.message||'No hay conexión con la Mac. Intenta otra vez.';}
@@ -273,7 +296,7 @@ function renderSession(){
     const rb=rawBest(p);
     PeluHandicap.setTime(card.querySelector('[data-stat="1"]'),last?last.s:null,p.h_s,hon,card.querySelector('[data-real="1"]'));
     PeluHandicap.setTime(card.querySelector('[data-stat="2"]'),rb,p.h_s,hon,card.querySelector('[data-real="2"]'));
-    const hcl=card.querySelector('.hclase'),hct=hon&&p.clase?PeluHandicap.label(p.clase,p.h_s):'';hcl.hidden=!hct;if(hcl.textContent!==hct)hcl.textContent=hct;
+    const hcl=card.querySelector('.hclase'),hct=hon&&p.clase?PeluHandicap.detalle(p):'';hcl.hidden=!hct;if(hcl.textContent!==hct)hcl.textContent=hct;
     PeluGauges.fillAvgKmh(card.querySelector('[data-kmh="1"]'),last&&last.s,dash);
     PeluGauges.fillAvgKmh(card.querySelector('[data-kmh="2"]'),rb,dash);
     // Vueltas sospechosas (más cortas que la vuelta mínima): no cuentan; se ven aquí para revisarlas.
@@ -542,7 +565,7 @@ function renderLapConfig(force=false){
     PeluHandicap.CLASES.forEach(([k,n])=>{const o=element('option','',PeluHandicap.ICON[k]+' '+n+' · '+PeluHandicap.segTxt(hcCfg().seg[k]));o.value=k;hc.append(o);});
     hc.value=hcCfg().clases[String(carFor(i))]||'sin_iman';hc.addEventListener('change',()=>setClase(carFor(i),hc.value));
     const sels=element('span','car-selects');sels.append(sel,hc);
-    row.append(element('span','',p.name),sels);target.append(row);
+    const nv=p.nivel||'intermedio';row.append(element('span','',p.name+' · '+PeluHandicap.NIVEL_ICON[nv]+' '+PeluHandicap.nivelTxt(nv)),sels);target.append(row);
   });
   renderHandicapConfig();
   if(!roster.slots.some(Boolean))target.append(element('p','help','Agrega pilotos para asignarles coche.'));
@@ -564,6 +587,8 @@ function renderHandicapConfig(){
   if(document.activeElement!==en)en.checked=!!h.enabled;
   PeluHandicap.CLASES.forEach(([k])=>{const i=$('hcSeg_'+k);if(i&&i.hcField&&document.activeElement!==i)i.hcField.setValue(h.seg[k]??0);});
   $('hcSeg').classList.toggle('off',!h.enabled);
+  const nb=$('hcNivel');if(nb&&!nb.contains(document.activeElement)){const sig=JSON.stringify([h.nivel_on,h.seg_nivel,h.nivel_auto,h.cortes,h.enabled]);
+    if(nb.dataset.sig!==sig){nb.dataset.sig=sig;PeluHandicap.nivelSettings(nb,h,saveHandicap,m=>{$('lapConfigError').textContent=m;});}nb.classList.toggle('off',!h.enabled);}
 }
 function saveHandicap(part){if(!lapConfig)return;saveLapConfig({source:lapConfig.source,cars:lapConfig.cars.slice(),handicap:part});}
 function setClase(car,clase){const c={};c[String(car)]=clase;saveHandicap({clases:c});}

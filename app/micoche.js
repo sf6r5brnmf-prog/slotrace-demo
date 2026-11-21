@@ -104,7 +104,12 @@ function renderPilot(p,d){
   document.body.style.setProperty('--team',p.color);
   const img=$('meAvatar'),src=avatarSrc(p.avatar);if(img.getAttribute('src')!==src){img.src=src;img.alt='Avatar de '+p.name;}
   setText($('meName'),p.name);
-  setText($('meCar'),d?(d.por_turnos?'Equipo '+p.color_name+' · por turnos':'Coche '+d.car+' · '+p.color_name):p.color_name);
+  const nvt=!p.torneo&&p.nivel_txt?' · '+p.nivel_txt:'';
+  setText($('meCar'),(d?(d.por_turnos?'Equipo '+p.color_name+' · por turnos':'Coche '+d.car+' · '+p.color_name):p.color_name)+nvt);
+  // Nivel sugerido por sus tiempos (se acepta en la pantalla grande: Menú → Pilotos).
+  const sg=$('meSug');if(sg){const x=p.sugerido&&p.sugerido.nivel!==p.nivel?p.sugerido:null,c=!x&&p.nivel_cambio;
+    const t=x?'Nivel sugerido: '+PeluHandicap.nivelTxt(x.nivel)+' (mejor vuelta '+Number(x.s).toFixed(2)+' s). Se acepta en la pantalla grande, Menú → Pilotos.':c?'Tu nivel cambió: '+PeluHandicap.nivelTxt(c.de)+' → '+PeluHandicap.nivelTxt(c.nivel)+' (mejor vuelta '+Number(c.s).toFixed(2)+' s).':'';
+    sg.hidden=!t;setText(sg,t);}
   // Bandera amarilla del piloto: «🟨 2/4» (las que pidió en esta carrera) o DSQ. Solo se ve; aquí no se quita nada.
   const fl=$('meFlags'),b=d&&d.banderas,ft=!b?'':b.dsq?'⛔ DESCALIFICADO':(!b.on&&!b.usadas)?'':b.texto;
   setText(fl,ft);fl.hidden=!ft;fl.classList.toggle('dsq',!!(b&&b.dsq));fl.classList.toggle('full',!!(b&&!b.dsq&&b.usadas>=b.max));
@@ -173,7 +178,7 @@ function render(v){
     if(s.fuente!=='gp'&&d.por_turnos&&d.turno_tuyo&&(s.fase==='ready'||s.fase==='paused'))alerts.push(['info','👉 Te toca: pon tu coche en la pista']);
     if(s.fase==='ready'&&d.grid)alerts.push(['info','Sales '+d.grid+'º en la parrilla']);
     if(s.aviso)alerts.push(['info',s.aviso]);
-    if(d.handicap_on&&d.h_s)alerts.push(['info','Handicap · '+(d.clase_txt||'')+': '+PeluHandicap.segTxt(d.h_s)+' por vuelta. Los tiempos con H ya lo incluyen.']);
+    if(d.handicap_on&&d.h_s)alerts.push(['info','Handicap · '+(d.h_txt||d.clase_txt||'')+(d.h_txt&&d.h_txt.includes(' · ')?' = '+PeluHandicap.segTxt(d.h_s):': '+PeluHandicap.segTxt(d.h_s))+' por vuelta. Los tiempos con H ya lo incluyen.']);
     const pitsEl=$('mePits'),pitsText=d.pits?pitLine(d.pits):'';
     if(pitsEl){pitsEl.hidden=!pitsText;if(pitsEl.textContent!==pitsText)pitsEl.textContent=pitsText;}
     const box=$('alerts'),sig=JSON.stringify(alerts);

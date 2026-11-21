@@ -61,7 +61,14 @@ def demo_defaults():
     srv.gp.set_config({'config': {'preset': 'personal', 'quali_minutes': 1, 'heats_rounds': 1, 'heats_minutes': 1.5, 'final_laps': 5, 'final_wait_s': 20,
                                   'torneo_minutes': 1, 'torneo_final_laps': 5}})
     # Handicap de ejemplo para enseñarlo: coche 2 con imán (+0.5 s por vuelta) y coche 4 modificado (+1 s). Se cambia en el menú.
-    srv.lap_config.write({'handicap': {'enabled': True, 'clases': {'2': 'con_iman', '4': 'modificado'}}})
+    srv.lap_config.write({'handicap': {'enabled': True, 'clases': {'2': 'con_iman', '4': 'modificado'},
+                                       # Nivel automático por tiempo (DEMO): Sin imán Experto < 11 s, Novato > 12 s, para que se vean cambios.
+                                       'cortes': {'sin_iman': {'experto': 11.0, 'novato': 12.0}}}})
+    # Niveles de ejemplo en el registro (se cambian en Menú → Pilotos → Editar).
+    d = srv.store.read()
+    for p, nv in zip(d['slots'], ('experto', 'intermedio', 'intermedio', 'novato')):
+        if p: p['nivel'] = nv
+    d['version'] += 1; srv.store.write(d)
 def _fix_modes(d):
     for root, dirs, files in _os.walk(d):
         for f in files:

@@ -53,7 +53,14 @@ function renderSetup(force){
       const nm=el('input','tq-name');nm.value=p.name;nm.maxLength=24;nm.setAttribute('aria-label','Nombre del piloto '+(i+1));
       nm.addEventListener('change',()=>{const q=ins.pilotos[i];const v=nm.value.replace(/\s+/g,' ').trim().slice(0,24);if(!q||!v){nm.value=q?q.name:'';return;}q.name=v;saveIns();});
       const del=el('button','tq-del','✕');del.type='button';del.setAttribute('aria-label','Quitar a '+p.name);del.addEventListener('click',()=>{ins.pilotos.splice(i,1);saveIns();renderSetup(true);});
-      li.append(el('b','tq-num',String(i+1)),nm,levelPicker(p.nivel,k=>{const q=ins.pilotos[i];if(q){q.nivel=k;saveIns();}renderSetup(true);},true),del);list.append(li);});
+      li.append(el('b','tq-num',String(i+1)),nm,levelPicker(p.nivel,k=>{const q=ins.pilotos[i];if(q){q.nivel=k;delete q.sugerido;delete q.nivel_cambio;saveIns();}renderSetup(true);},true),del);
+      // Nivel sugerido por sus tiempos (o cambiado solo, en modo «Cambiar solo»).
+      const sg=p.sugerido,ch=p.nivel_cambio;
+      if((sg&&sg.nivel!==p.nivel)||ch){const s=el('div','tq-sug'+(sg?'':' cambio'));
+        s.append(el('span','',sg?'Sugerido: '+PeluHandicap.NIVEL_ICON[sg.nivel]+' '+PeluHandicap.nivelTxt(sg.nivel)+' · '+Number(sg.s).toFixed(2)+' s':'Cambió solo: '+PeluHandicap.nivelTxt(ch.de)+' → '+PeluHandicap.nivelTxt(ch.nivel)+' · '+Number(ch.s).toFixed(2)+' s'));
+        if(sg){const ok=el('button','primary','Aceptar');ok.type='button';ok.addEventListener('click',()=>{const q=ins.pilotos[i];if(q){q.nivel=sg.nivel;delete q.sugerido;saveIns();}renderSetup(true);});s.append(ok);}
+        const no=el('button','','✕');no.type='button';no.setAttribute('aria-label','Quitar aviso');no.addEventListener('click',()=>{const q=ins.pilotos[i];if(q){delete q.sugerido;delete q.nivel_cambio;saveIns();}renderSetup(true);});s.append(no);li.append(s);}
+      list.append(li);});
     if(!n)list.append(el('li','muted','Todavía no hay inscritos. Escribe un nombre arriba y aprieta «Inscribir».'));}
   const cnt={novato:0,intermedio:0,experto:0};ins.pilotos.forEach(p=>cnt[p.nivel]++);
   const w=$('tqWarn');w.textContent=n<MIN?('Faltan '+(MIN-n)+' piloto'+(MIN-n===1?'':'s')+' para un torneo (mínimo '+MIN+'). Con 6 o menos no hay a quién eliminar: usa «Nuevo Gran Premio».'):(n<12?'Con '+n+' pilotos sí se puede; con 12 o más el torneo luce mejor.':'');
@@ -71,13 +78,15 @@ function renderSetup(force){
 function addPilot(name,nivel){
   name=String(name||'').replace(/\s+/g,' ').trim().slice(0,24);if(!name)return 'Escribe el nombre del piloto.';
   if(ins.pilotos.some(p=>p.name.toLocaleLowerCase('es-MX')===name.toLocaleLowerCase('es-MX')))return '«'+name+'» ya está inscrito. Ponle apellido o apodo.';
-  ins.pilotos.push({name,nivel});return '';
+  // Si está en el registro de pilotos, entra con SU nivel (se puede cambiar aquí solo para el torneo).
+  const reg=(roster?.slots||[]).find(r=>r&&r.name.toLocaleLowerCase('es-MX')===name.toLocaleLowerCase('es-MX'));
+  ins.pilotos.push({name,nivel:reg&&reg.nivel?reg.nivel:nivel});return '';
 }
 function wire(){
   if(!$('torneoTab'))return;
   if(new URLSearchParams(location.search).get('tab')==='torneo'){const b=document.querySelector('.tab[data-tab="torneoTab"]');if(b)setTimeout(()=>b.click(),0);}
   $('tqAdd').addEventListener('submit',e=>{e.preventDefault();if(!ins)return;const err=addPilot($('tqName').value,addLevel);$('tqError').textContent=err;if(err)return;$('tqName').value='';saveIns();renderSetup(true);$('tqName').focus();});
-  $('tqRoster').addEventListener('click',()=>{if(!ins||!roster)return;let k=0;(roster.slots||[]).forEach(p=>{if(p&&!addPilot(p.name,'intermedio'))k++;});$('tqError').textContent=k?'':'Los pilotos registrados ya están inscritos.';if(k){saveIns();toast(k+' piloto'+(k===1?'':'s')+' del registro inscrito'+(k===1?'':'s')+' (nivel Intermedio: cámbialo si hace falta)');}renderSetup(true);});
+  $('tqRoster').addEventListener('click',()=>{if(!ins||!roster)return;let k=0;(roster.slots||[]).forEach(p=>{if(p&&!addPilot(p.name,p.nivel||'intermedio'))k++;});$('tqError').textContent=k?'':'Los pilotos registrados ya están inscritos.';if(k){saveIns();toast(k+' piloto'+(k===1?'':'s')+' del registro inscrito'+(k===1?'':'s')+' con su nivel del registro');}renderSetup(true);});
   $('tqClear').addEventListener('click',()=>{if(!ins||!ins.pilotos.length)return;if(!confirm('¿Borrar toda la lista de inscritos?'))return;ins.pilotos=[];saveIns();renderSetup(true);});
   $('tqCreate').addEventListener('click',async()=>{
     if(!ins)return;$('tqError').textContent='';clearTimeout(insTimer);
@@ -107,7 +116,7 @@ function pilotRow(m,p,editable,showRes){
   const row=el(editable?'button':'div','tq-p'+(p.eliminado?' out':'')+(sel===p.slot?' sel':''));if(editable)row.type='button';
   row.dataset.slot=p.slot;
   row.append(carChip(p.car),el('span','tq-pname',p.name),nivelChip(p.nivel));
-  if(p.clase&&p.h_s)row.append(el('span','tq-hc',PeluHandicap.ICON[p.clase]+' '+PeluHandicap.segTxt(p.h_s)));
+  if(p.clase&&p.h_s)row.append(el('span','tq-hc',PeluHandicap.detalle(p)+(p.h_coche&&p.h_nivel?' = '+PeluHandicap.segTxt(p.h_s):'')));
   if(showRes&&p.laps!=null){row.append(el('span','tq-res',(p.dsq?'DSQ':p.pos?'P'+p.pos:'—')+' · '+p.laps+' v'+(p.total_h!=null&&state.gp.handicap?.on?' · '+p.total_h.toFixed(1)+' s H':p.total!=null?' · '+p.total.toFixed(1)+' s':'')));}
   if(p.eliminado)row.append(el('span','tq-out','ELIMINADO'));
   if(editable)row.addEventListener('click',()=>pickSwap(p.slot));

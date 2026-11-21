@@ -60,3 +60,4 @@
 .mc-turno.ahora{border-color:var(--lime);background:#1d2a10}.mc-turno.ahora .mc-turno-tag{background:var(--lime);color:#11150b}
 .mc-turno.eliminado{border-color:#b3261e;background:#2a1416}.mc-turno.eliminado .mc-turno-tag{background:#b3261e}
 .mc-turno.campeon{border-color:#f5c542;background:#2a2410}.mc-turno.campeon .mc-turno-tag{background:#f5c542;color:#1a1400}
+.mc-sug{margin:8px 0;padding:10px 12px;border-radius:12px;border:1px solid #f5c54288;background:#2a2410;color:#f5d77a;font-weight:700}.mc-sug[hidden]{display:none}

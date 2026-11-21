@@ -52,7 +52,10 @@ def piloto_de(roster, slot):
     p = (roster or {}).get('slots', [None] * 6)[slot]
     if not p: return None
     name, hexa = COLORS[slot]
-    return {'slot': slot, 'name': p['name'], 'avatar': p['avatar'], 'revision': p.get('revision'), 'color': hexa, 'color_name': name}
+    nv = handicap_mod.nivel_ok(p.get('nivel'))
+    return {'slot': slot, 'name': p['name'], 'avatar': p['avatar'], 'revision': p.get('revision'), 'color': hexa, 'color_name': name,
+            'nivel': nv, 'nivel_txt': handicap_mod.NIVEL_TXT[nv], 'sugerido': handicap_mod.limpiar_sugerido(p.get('sugerido')),
+            'nivel_cambio': handicap_mod.limpiar_sugerido(p.get('nivel_cambio'))}
 
 
 def slot_desde_parametro(roster, valor):
@@ -138,7 +141,7 @@ def _vista_live(s, live_snap, slot, dash):
     sesion['aviso'] = notice if notice and 'Empezar' not in notice and not any(n and n in notice for n in otros) else None
     hs = (me.get('h_s') or 0.0) if hon else 0.0
     datos = {'car': car, 'por_turnos': not scx_on, 'laps': len(me['laps']), 'last': last['s'] if last else None, 'best': raw_best(me),
-             'handicap_on': hon, 'h_s': hs, 'clase_txt': me.get('clase_txt'), 'best_h': mine, 'last_h': handicap_mod.mas(last['s'], hs) if last else None,
+             'handicap_on': hon, 'h_s': hs, 'clase_txt': me.get('clase_txt'), 'h_txt': me.get('h_txt') or '', 'nivel': me.get('nivel'), 'nivel_txt': me.get('nivel_txt') or '', 'best_h': mine, 'last_h': handicap_mod.mas(last['s'], hs) if last else None,
              'kmh': float(last['escala']) if last and isinstance(last.get('escala'), (int, float)) else None, 'fuel': fuel,
              'pos': rank, 'total': len(timed), 'gap': gap, 'gap_texto': _fmt_gap(gap), 'gap_vueltas': None,
              'en_pista': (not ended) and not rf and (s['phase'] == 'running' if scx_mode else s.get('active') == slot),
@@ -191,7 +194,7 @@ def _vista_gp(g, gp_snap, slot, dash):
             'sospechosas': _sospechosas([], 0, cfg.get('min_lap_s')), 'dsq': False,
             'banderas': _banderas(0, False, _gp_flag_cfg(cfg)),
             'pits': _pits(None),
-            'handicap_on': hon, 'h_s': hs, 'clase_txt': me.get('clase_txt'), 'best_h': None, 'last_h': None,
+            'handicap_on': hon, 'h_s': hs, 'clase_txt': me.get('clase_txt'), 'h_txt': me.get('h_txt') or '', 'nivel': me.get('nivel'), 'nivel_txt': me.get('nivel_txt') or '', 'best_h': None, 'last_h': None,
             'qualy': {'best': qmine['best'], 'best_h': qmine.get('best_h'), 'laps': qmine['laps'], 'done': qmine['done'],
                       'dsq': bool(qmine.get('dsq')),
                       'pos': (1 + sum(1 for q in quali if q.get(qb) is not None and not q.get('dsq') and q[qb] < qmine[qb])) if qmine and qmine.get(qb) is not None and not qmine.get('dsq') else None,

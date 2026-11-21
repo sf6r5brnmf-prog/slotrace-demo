@@ -130,7 +130,7 @@ body.paro-on.paro-yellow{box-shadow:inset 0 0 0 8px #ffd000}
 /* Handicap · ajuste de tiempo por vuelta */
 .hmark{font:900 10px system-ui,sans-serif;margin-left:3px;padding:1px 4px;border-radius:4px;background:#ffe23b;color:#111;vertical-align:super;letter-spacing:0}
 .greal{display:block;margin-top:1px;font:600 11px system-ui,sans-serif;color:var(--muted,#9aa4b2);letter-spacing:0;text-transform:none}.greal[hidden]{display:none}
-.hclase{display:inline-block;margin-left:4px;font-size:11px;font-weight:800;padding:2px 6px;border-radius:5px;background:#ffe23b22;color:#ffe9a0;white-space:nowrap}.hclase[hidden]{display:none}
+.hclase{display:inline-block;margin-left:4px;font-size:11px;font-weight:800;padding:2px 6px;border-radius:5px;background:#ffe23b22;color:#ffe9a0;white-space:normal;max-width:100%;line-height:1.3}.hclase[hidden]{display:none}
 .hc-box{margin-top:18px;border-top:1px solid var(--line,#2a313c);padding-top:14px}
 .hc-toggle{display:flex!important;align-items:center;gap:10px;font-weight:700}.hc-toggle input{width:22px;height:22px;accent-color:#c6ff3d}
 .hc-seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px}
@@ -211,3 +211,6 @@ button.tq-p{cursor:pointer}.tq-p.sel{outline:3px solid var(--lime);outline-offse
 @media (max-width:600px){.tq-p{font-size:14px;gap:6px}.tq-pname{min-width:60px}.tq-carsel{max-width:92px}}
 .tq-name{width:0}.tq-item{min-width:0}
 @media (max-width:600px){.tq-list{grid-template-columns:minmax(0,1fr)}.tq-lvls.sm .tq-lvlbtn{padding:8px 9px;min-width:36px}}
+.tq-item{flex-wrap:wrap}.tq-sug{flex-basis:100%;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#2a2410;border:1px solid #f5c54266;color:#f5d77a;border-radius:8px;padding:6px 8px;font-size:14px}
+.tq-sug.cambio{background:#132a1c;border-color:#2fbf7166;color:#7fe0a5}.tq-sug button{min-height:40px;padding:4px 12px;border-radius:8px}.tq-sug span{flex:1;min-width:150px}
+.pick-sel .nv-sel{font:16px system-ui;background:#0b0d11;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:9px}

@@ -203,9 +203,9 @@ class Live:
                 h=self.session_handicap(s);cars=[]
                 for p in s['pilots']:
                     car=self.car_of_slot(p['slot']);cars.append(car)
-                    p.update(handicap_mod.info(h,car))
-                s['handicap']={'on':handicap_mod.activo(h,cars),'enabled':bool(h and h.get('enabled')),'resumen':handicap_mod.resumen(h),
-                               'seg':(h or handicap_mod.OFF)['seg'],'fijo':s['phase']!='ready'}
+                    p.update(handicap_mod.info(h,car,p.get('nivel')))   # clase del coche + nivel del piloto
+                s['handicap']={'on':handicap_mod.activo(h,cars,[p.get('nivel') for p in s['pilots']]),'enabled':bool(h and h.get('enabled')),'resumen':handicap_mod.resumen(h),
+                               'seg':(h or handicap_mod.OFF)['seg'],'nivel_on':bool(h and h.get('nivel_on')),'seg_nivel':(h or handicap_mod.OFF).get('seg_nivel') or {},'fijo':s['phase']!='ready'}
                 if not include_sensor_data:
                     # URLs de avatares, nunca PNG/base64; omitir metadatos internos por vuelta.
                     for p in s['pilots']:
@@ -396,8 +396,8 @@ class Live:
         """Práctica/Carrera actual (o la última terminada): vueltas válidas y vueltas sospechosas (columna «Cuenta»)."""
         with self.lock:s=copy.deepcopy(self.session);minimum=self.min_lap_s()
         if not s:raise LiveError('Todavía no hay una sesión de Práctica o Carrera.',404)
-        hcfg=self.session_handicap(s);hs={p['slot']:handicap_mod.seg_de(hcfg,self.car_of_slot(p['slot'])) for p in s['pilots']}
-        hcl=lambda slot:handicap_mod.NOMBRE[handicap_mod.clase_de(hcfg,self.car_of_slot(slot))]
+        hcfg=self.session_handicap(s);hs={p['slot']:handicap_mod.seg_de(hcfg,self.car_of_slot(p['slot']),p.get('nivel')) for p in s['pilots']}
+        hcols={p['slot']:handicap_mod.csv_cols(handicap_mod.info(hcfg,self.car_of_slot(p['slot']),p.get('nivel'))) for p in s['pilots']}
         config=getattr(self,'lap_config',None)
         def car_of(slot):
             try:return config.car_for_slot(slot) if config is not None else ''
@@ -409,11 +409,11 @@ class Live:
         w.writerow(['Puto el último · '+('Carrera' if s.get('type')=='race' else 'Práctica'),time.strftime('%Y-%m-%d %H:%M',time.localtime(s.get('created_at') or time.time()))])
         w.writerow(['Vuelta mínima (s)',minimum,'Fuente',src.get(s.get('lap_source'),s.get('lap_source') or ''),'Handicap (s por vuelta)',handicap_mod.resumen(hcfg)])
         w.writerow([])
-        w.writerow(['Piloto','Coche','Vuelta #','Tiempo (s)','km/h escala','Cuenta','Hora','Fuente','Después de la vuelta','Clase','Handicap (s por vuelta)','Tiempo con handicap (s)'])
+        w.writerow(['Piloto','Coche','Vuelta #','Tiempo (s)','km/h escala','Cuenta','Hora','Fuente','Después de la vuelta']+handicap_mod.CSV_HEAD+['Tiempo con handicap (s)'])
         for p in s['pilots']:
             car=car_of(p['slot']);h=hs[p['slot']]
             for l in p['laps']:
-                w.writerow([p['name'],car,l['n'],f3(l['s']),'' if l.get('escala') is None else round(l['escala'],1),'sí','','','',hcl(p['slot']),'%.2f'%h,f3(handicap_mod.mas(l['s'],h))])
+                w.writerow([p['name'],car,l['n'],f3(l['s']),'' if l.get('escala') is None else round(l['escala'],1),'sí','','','']+hcols[p['slot']]+[f3(handicap_mod.mas(l['s'],h))])
             for x in p.get('sospechosas') or []:
                 w.writerow([p['name'],x.get('car') or car,'',f3(x.get('s')),'','NO · sospechosa (menos de %g s)'%(x.get('min') or minimum),
                             hora(x.get('hora')),src.get(x.get('src'),x.get('src') or ''),x.get('tras_vuelta','')])
@@ -421,7 +421,7 @@ class Live:
         # Resultado con la bandera amarilla del piloto: descalificados al final y sin posición.
         fl=self.flag_cfg();w.writerow([])
         w.writerow(['RESULTADO','Posición','Piloto','Coche','Vueltas','Mejor vuelta (s)','Banderas amarillas (máx. %d)'%fl['max'],'Estado','Hora DSQ','Vueltas al DSQ','Pasadas que ya no contaron','Paradas en pits','Última parada (s)','Tiempo en pits (s)','Vel. última (km/h)','Vel. mejor (km/h)','Llanta','Vueltas con las llantas actuales','Km con las llantas actuales',
-                    'Clase','Handicap (s por vuelta)','Mejor vuelta con handicap (s)','Tiempo total real (s)','Tiempo total con handicap (s)'])
+                    ]+handicap_mod.CSV_HEAD+['Mejor vuelta con handicap (s)','Tiempo total real (s)','Tiempo total con handicap (s)'])
         tire_now=self.tire_name();km_now=self.km_lap()
         for pos,p in self.standings(s,hs):
             q=p.get('dsq') or {};best=min((l['s'] for l in p['laps']),default=None);last=p['laps'][-1]['s'] if p['laps'] else None
@@ -430,7 +430,7 @@ class Live:
                         hora(q.get('at')),q.get('laps','') if q else '',q.get('ignored','') if q else '',
                         pv['completadas'],'' if pv['ultima_s'] is None else '%.1f'%pv['ultima_s'],'' if not pv['completadas'] and not pv['en_pits'] else '%.1f'%pv['total_s'],
                         self.vel_txt(last),self.vel_txt(best),tire_now,ll['vueltas'],'' if ll['km'] is None else '%.1f'%ll['km'],
-                        hcl(p['slot']),'%.2f'%hs[p['slot']],f3(handicap_mod.mas(best,hs[p['slot']])),
+                        ]+hcols[p['slot']]+[f3(handicap_mod.mas(best,hs[p['slot']])),
                         f3(sum(l['s'] for l in p['laps'])) if p['laps'] else '',f3(handicap_mod.suma((l['s'] for l in p['laps']),hs[p['slot']])) if p['laps'] else ''])
         # Cada parada en pits = CAMBIO DE LLANTAS: vida de llanta al entrar/salir (%) y vueltas/km de ese juego.
         km_lap=self.km_lap()
@@ -715,7 +715,7 @@ class Live:
                 pilots=[]
                 for i in ids:
                     source=self.directory/roster['slots'][i]['avatar'].lstrip('/');avatar='/avatars/'+uuid.uuid4().hex+'.png';shutil.copyfile(source,self.directory/avatar.lstrip('/'))
-                    pilots.append(dict(slot=i,name=roster['slots'][i]['name'],avatar=avatar,laps=[]))
+                    pilots.append(dict(slot=i,name=roster['slots'][i]['name'],avatar=avatar,laps=[],nivel=handicap_mod.nivel_ok(roster['slots'][i].get('nivel'))))
                 source=self.resolve_source()
                 # Práctica y Carrera empiezan en "listos": se ve el tablero y el botón Empezar. Nada cuenta (ni se
                 # reinicia la ESP32) hasta que alguien aprieta Empezar y el semáforo llega a verde.
@@ -731,6 +731,9 @@ class Live:
                 if s['phase']=='ready':
                     secs=self.lights_seconds()
                     s['handicap']=self.current_handicap()   # el handicap queda fijo al apretar Empezar
+                    for p in s['pilots']:   # y el nivel de cada piloto (registro de pilotos), también
+                        r=roster['slots'][p['slot']] if 0<=p['slot']<len(roster['slots']) else None
+                        if r and r.get('name')==p['name']:p['nivel']=handicap_mod.nivel_ok(r.get('nivel'))
                     s.update(phase='countdown',starts_at=time.time()+secs,countdown_total=secs,control=s['control']+1,version=s['version']+1,notice='¡Semáforo! Nadie arranca antes del verde.')
                     s.pop('reset_sent',None);s.pop('flush_previous',None)
                     for key in [k for k in self.scx_marks if k[0]==s['id']]:self.scx_marks.pop(key,None)   # la primera pasada tras el verde es la salida

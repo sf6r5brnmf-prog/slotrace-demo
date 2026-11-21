@@ -88,10 +88,13 @@ function renderConfig(cfg){
   const en=el('label','cfg-row cfg-bool'),cb=el('input');cb.type='checkbox';cb.checked=!!h.enabled;cb.id='hcEnabled';en.append(cb,el('span','','Usar handicap (se suma o resta a cada vuelta según la clase del coche)'));box.append(en);
   PeluHandicap.CLASES.forEach(([k,n])=>{const row=el('div','cfg-row hc-row'),i=el('input');i.id='hcCfg_'+k;i.dataset.hc=k;const lb=el('label','',PeluHandicap.ICON[k]+' '+n+' · segundos por vuelta');lb.htmlFor=i.id;row.append(lb,i);box.append(row);PeluHandicap.upgrade(i).setValue(h.seg[k]??0);});
   box.append(el('p','muted','Toca + / − para elegir si SUMA o RESTA segundos, y escribe el número (0 a 10). Si resta, una vuelta ajustada nunca baja de 1 s.'));
+  // Por nivel del piloto + nivel automático por tiempo: se guarda al momento (data/vueltas.json), igual que en el menú.
+  const nb=el('div','hc-nivel');nb.id='gpHcNivel';box.append(nb);
+  PeluHandicap.nivelSettings(nb,h,async part=>{try{await saveHandicap(part);$('configMsg').textContent='Guardado.';}catch(e){$('configMsg').textContent=e.message;}},m=>{$('configMsg').textContent=m;});
   box.append(el('p','muted','Los de fábrica (Con imán +0.5 s, Modificado +1 s, Sin imán 0 s) son ejemplos: cámbialos. La clase de cada coche se elige en «Nuevo Gran Premio», junto al número de coche. Queda fijo al arrancar la primera parte del Gran Premio.'));
   f.append(box);
 }
-function hcCfg(){return state?.handicap_cfg||{enabled:true,seg:{sin_iman:0,con_iman:0.5,modificado:1},clases:{}};}
+function hcCfg(){return state?.handicap_cfg||{enabled:true,seg:{sin_iman:0,con_iman:0.5,modificado:1},clases:{},nivel_on:true,seg_nivel:{novato:-0.3,intermedio:0,experto:0.3},nivel_auto:'sugerir'};}
 function readHandicap(){const seg={};let bad=false;$('configForm').querySelectorAll('[data-hc]').forEach(i=>{const v=i.hcField?i.hcField.getValue():Number(String(i.value).replace(',','.'));if(!Number.isFinite(v)||v<-10||v>10)bad=true;seg[i.dataset.hc]=Math.round(v*100)/100;});
   if(bad)throw Error('El ajuste por vuelta debe ser un número de 0 a 10 segundos (el botón + / − elige si suma o resta).');return {enabled:$('hcEnabled').checked,seg};}
 async function saveHandicap(part){const d=await post('/api/vueltas-config',{handicap:part});if(state)state.handicap_cfg=d.handicap;return d.handicap;}
@@ -132,7 +135,14 @@ function renderSetup(force){
       sel.addEventListener('change',()=>{carPick[i]=Number(sel.value);syncH();});
       hsel.addEventListener('click',e=>e.preventDefault&&e.stopPropagation());
       hsel.addEventListener('change',async()=>{const c={};c[String(carPick[i])]=hsel.value;try{await saveHandicap({clases:c});toast('Coche '+carPick[i]+': '+PeluHandicap.NOMBRE[hsel.value]);}catch(e){toast(e.message);syncH();}});
-      const sels=el('span','pick-sel');sels.append(sel,hsel);
+      // Nivel del piloto (se guarda en el registro): suma o resta por vuelta además de la clase del coche.
+      const nv=p.nivel||'intermedio',nsel=el('select','nv-sel');nsel.setAttribute('aria-label','Nivel de '+p.name);
+      PeluHandicap.NIVELES.forEach(([k,n])=>{const o=el('option','',PeluHandicap.NIVEL_ICON[k]+' '+n+(hh.enabled&&hh.nivel_on!==false?' · '+PeluHandicap.segTxt((hh.seg_nivel||{})[k]||0):''));o.value=k;nsel.append(o);});nsel.value=nv;
+      nsel.addEventListener('click',e=>e.preventDefault&&e.stopPropagation());
+      nsel.addEventListener('change',()=>setNivel(i,nsel.value));
+      const sels=el('span','pick-sel');sels.append(sel,hsel,nsel);
+      if(p.sugerido&&p.sugerido.nivel!==nv){const sg=el('small','pick-sug');sg.append(document.createTextNode('Sugerido: '+PeluHandicap.NIVEL_ICON[p.sugerido.nivel]+' '+PeluHandicap.nivelTxt(p.sugerido.nivel)+' ('+Number(p.sugerido.s).toFixed(2)+' s) '));
+        const ok=el('button','chip-button','Aceptar');ok.type='button';ok.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();setNivel(i,p.sugerido.nivel);});sg.append(ok);name.append(sg);}
       card.append(cb,img,name,sels);box.append(card);});
     if(!roster.slots.some(Boolean))box.append(el('p','muted','No hay pilotos. Regístralos en el menú → Pilotos.'));}
   const tr=$('throttleRow');if(!tr.children.length)for(let k=1;k<=6;k++){const s=el('span','thr');s.dataset.car=k;s.append(el('b','',k),el('i'));tr.append(s);}
@@ -180,7 +190,7 @@ function cardFor(slot){
   if(!card){
     const p=state.gp.pilots.find(x=>x.slot===slot);card=el('article','gcard');card.dataset.slot=slot;card.dataset.hon=String(hon);card.dataset.car=pcar;card.style.setProperty('--team',COLORS[teamIdx(slot)]);
     const top=el('div','gtop');const pos=el('div','gpos','—');const img=el('img','gav');img.src=p.avatar;img.alt='';
-    const nm=el('div','gname'),pide=el('span','pide sin','⇄');pide.dataset.car=p.car;pide.setAttribute('role','status');const fl=el('span','gflags');fl.title='Banderas amarillas que pidió en esta parte (triple clic en su botón de cambio de carril)';const hcl=el('span','hclase',hon&&p.clase?PeluHandicap.label(p.clase,p.h_s):'');hcl.hidden=!(hon&&p.clase);nm.append(el('strong','',p.name),el('small','','Coche '+p.car+' · '+TEAM[teamIdx(slot)]+(p.nivel&&window.PeluTorneo?' · '+PeluTorneo.nivelTxt(p.nivel):'')),hcl,pide,fl);
+    const nm=el('div','gname'),pide=el('span','pide sin','⇄');pide.dataset.car=p.car;pide.setAttribute('role','status');const fl=el('span','gflags');fl.title='Banderas amarillas que pidió en esta parte (triple clic en su botón de cambio de carril)';const hcl=el('span','hclase',hon&&p.clase?PeluHandicap.detalle(p):'');hcl.hidden=!(hon&&p.clase);nm.append(el('strong','',p.name),el('small','','Coche '+p.car+' · '+TEAM[teamIdx(slot)]+(p.nivel?' · '+PeluHandicap.NIVEL_ICON[p.nivel]+' '+PeluHandicap.nivelTxt(p.nivel):'')),hcl,pide,fl);
     const badge=el('span','gbadge');top.append(pos,img,nm,badge);
     const cv=el('canvas','gcanvas');const stats=el('div','gstats');
     [['Vueltas','laps'],['Última','last'],['Mejor','best']].forEach(([l,k])=>{const b=el('div');b.append(el('span','',l),el('strong','','—'));b.dataset.k=k;if(k!=='laps'){const real=el('small','greal');real.hidden=true;const kmh=el('small','gkmh');kmh.hidden=true;b.append(real,kmh);}stats.append(b);});
@@ -274,7 +284,7 @@ function renderTables(g,target){
   if(g.mode==='torneo'&&window.PeluTorneo){PeluTorneo.tables(g,box);return;}
   box.replaceChildren();
   // Handicap: columnas extra con el tiempo ajustado (H) y la clase de cada coche.
-  const hon=!!g.handicap?.on,hn=r=>hon&&r.clase?' · '+PeluHandicap.label(r.clase,r.h_s):'',fh=x=>x==null?'—':x.toFixed(2)+' s H';
+  const hon=!!g.handicap?.on,hn=r=>hon&&r.clase?' · '+PeluHandicap.detalle(r):'',fh=x=>x==null?'—':x.toFixed(2)+' s H';
   if(g.final.length&&g.runs[g.runs.length-1].phase!=='ready')box.append(table('Final'+(hon?' · con handicap (vueltas, luego tiempo total ajustado)':''),hon?['Pos','Piloto','Vueltas','Mejor','Mejor (H)','Total (H)']:['Pos','Piloto','Vueltas','Mejor'],g.final.map(r=>[r.dsq?'DSQ':r.pos??'—',r.name+(r.false_start?' ⚠':'')+(r.dsq?' · DESCALIFICADO':'')+hn(r),r.laps,fmt(r.best)].concat(hon?[fh(r.best_h),fh(r.total_h)]:[]))));
   if(g.heats.length&&g.runs.some(r=>r.kind==='heat'&&r.phase!=='ready'))box.append(table('Eliminatorias · suma de vueltas'+(hon?' · desempata el tiempo total con handicap':''),(hon?['Pos','Piloto','Vueltas','Mejor','Total (H)']:['Pos','Piloto','Vueltas','Mejor']).concat(g.heats[0].rounds.map((_,i)=>'R'+(i+1))),g.heats.map((r,i)=>[r.dsq?'DSQ':i+1,name(r.slot)+(r.dsq?' · DESCALIFICADO':'')+hn(r),r.laps,fmt(r.best)].concat(hon?[fh(r.total_h)]:[]).concat(r.rounds))));
   if((g.sospechosas||[]).length){const t=table('⚠ Vueltas sospechosas · no cuentan (menos de '+minText(g.config.min_lap_s)+' s)',['Parte','Piloto','Tiempo','Hora','Fuente'],g.sospechosas.slice(-30).reverse().map(x=>[x.parte,x.name+(x.car?' · coche '+x.car:''),fmt(x.s),x.hora?new Date(x.hora*1000).toLocaleTimeString('es-MX'):'',SRC[x.src]||x.src||'']));t.classList.add('sus-box');box.append(t);}
@@ -315,7 +325,7 @@ PeluParo.onStop=async()=>{if(!state?.gp)return;apply(await post('/api/gp',{actio
 PeluParo.onResume=async()=>{if(!state?.gp)return;apply(await post('/api/gp',{action:'resume',id:state.gp.id}));};
 function renderDone(g){
   const pod=$('podium');pod.replaceChildren();const top=g.final.filter(r=>!r.dsq).slice(0,3);   // un descalificado no sube al podio
-  [1,0,2].forEach(i=>{const r=top[i];if(!r)return;const b=el('div','pod pod'+(i+1));b.style.setProperty('--team',COLORS[teamIdx(r.slot,r.car)]);const img=el('img');img.src=r.avatar;img.alt='';b.append(img,el('strong','',r.name),el('span','',['🥇','🥈','🥉'][i]+' P'+(i+1)+' · '+r.laps+' v · '+(g.handicap?.on?'total '+(r.total_h==null?'—':r.total_h.toFixed(2)+' s')+' H · '+PeluHandicap.label(r.clase,r.h_s):'mejor '+fmt(r.best))));pod.append(b);});
+  [1,0,2].forEach(i=>{const r=top[i];if(!r)return;const b=el('div','pod pod'+(i+1));b.style.setProperty('--team',COLORS[teamIdx(r.slot,r.car)]);const img=el('img');img.src=r.avatar;img.alt='';b.append(img,el('strong','',r.name),el('span','',['🥇','🥈','🥉'][i]+' P'+(i+1)+' · '+r.laps+' v · '+(g.handicap?.on?'total '+(r.total_h==null?'—':r.total_h.toFixed(2)+' s')+' H · '+PeluHandicap.detalle(r):'mejor '+fmt(r.best))));pod.append(b);});
   if(window.PeluTorneo)PeluTorneo.renderDone(g);
   const hb=$('podiumHandicap');if(hb){hb.hidden=!g.handicap?.on;hb.textContent=g.handicap?.on?'Con handicap · H = tiempo real + ajuste por vuelta ('+g.handicap.resumen+'). El orden real de cruce está en el CSV.':'';}
   renderTables(g,'doneTables');
@@ -337,6 +347,7 @@ async function poll(){
   catch(e){fails++;if(fails>3){$('connection').textContent=fails>20?PeluAvisos.offlineText(99):'Sin respuesta de la Mac · reintentando';$('connection').className='chip bad';const sc=$('scxStatus');sc.textContent='● SCX sin datos (no hay conexión con la Mac)';sc.className='chip bad';}}
   finally{clearTimeout(to);polling=false;}
 }
+async function setNivel(i,nivel){try{await post('/api/slot',{slot:i,action:'nivel',nivel});toast('Nivel de '+(roster.slots[i]||{}).name+': '+PeluHandicap.nivelTxt(nivel));await pollRoster();renderSetup(true);}catch(e){toast(e.message);}}
 async function pollRoster(){try{const r=await fetch('/api/roster',{cache:'no-store'});if(r.ok){roster=await r.json();if(state&&screenName==='setup')renderSetup(false);}}catch(e){}}
 syncSoundButton();pollRoster().then(poll);setInterval(poll,250);setInterval(pollRoster,3000);
 window.PELU_GP={get state(){return state;}};

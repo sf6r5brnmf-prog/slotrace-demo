@@ -71,7 +71,11 @@ def limpiar_inscritos(raw):
         nivel = p.get('nivel', 'intermedio')
         if nivel not in NIVEL_TXT: raise TorneoError('Nivel inválido para %s: Novato, Intermedio o Experto.' % name)
         pid = p.get('id') if isinstance(p.get('id'), str) and re.fullmatch(r'[a-z0-9]{1,16}', p.get('id') or '') else uuid.uuid4().hex[:10]
-        out.append({'id': pid, 'name': name, 'nivel': nivel})
+        q = {'id': pid, 'name': name, 'nivel': nivel}
+        for k in ('sugerido', 'nivel_cambio'):   # nivel automático por tiempo (ver handicap.aplicar_nivel)
+            x = handicap_mod.limpiar_sugerido(p.get(k))
+            if x: q[k] = x
+        out.append(q)
     return out
 
 
@@ -343,7 +347,8 @@ class TorneoMixin:
         def fila(run, r):
             p = self.pilot(r['slot'])
             return {'slot': r['slot'], 'name': p['name'], 'nivel': p.get('nivel'), 'car': r['car'], 'avatar': p.get('avatar') or '',
-                    'clase': r.get('clase'), 'clase_txt': r.get('clase_txt'), 'h_s': r.get('h_s', 0.0), 'laps': r['laps'], 'best': r['best'],
+                    'clase': r.get('clase'), 'clase_txt': r.get('clase_txt'), 'h_s': r.get('h_s', 0.0), 'h_coche': r.get('h_coche', 0.0),
+                    'h_nivel': r.get('h_nivel', 0.0), 'nivel_txt': r.get('nivel_txt'), 'h_txt': r.get('h_txt', ''), 'laps': r['laps'], 'best': r['best'],
                     'total': r.get('total'), 'total_h': r.get('total_h'), 'pos': r.get('pos'), 'dsq': r.get('dsq'), 'finished': r.get('finished'),
                     'eliminado': r['slot'] in elim and elim[r['slot']]['parte'] == run['label']}
         rondas = []
@@ -355,7 +360,7 @@ class TorneoMixin:
                     pil = []
                     for s in run['participants']:
                         p = self.pilot(s); car = run['cars'][str(s)]
-                        pil.append(dict(handicap_mod.info(hcfg, car), slot=s, name=p['name'], nivel=p.get('nivel'), car=car, avatar=p.get('avatar') or '',
+                        pil.append(dict(handicap_mod.info(hcfg, car, p.get('nivel')), slot=s, name=p['name'], nivel=p.get('nivel'), car=car, avatar=p.get('avatar') or '',
                                         laps=None, best=None, total=None, total_h=None, pos=None, dsq=False, finished=False, eliminado=False))
                 else:
                     pil = [fila(run, r) for r in self.run_rows(run)]
@@ -436,7 +441,7 @@ class TorneoMixin:
         w.writerow(['Modo', 'Torneo por mangas', 'Inscritos', len(g['pilots']), 'Coches por manga', t['cars'], 'Minutos por manga', self._minutes_torneo(),
                     'Mangas', 'agrupadas por nivel' if t['agrupar'] == 'nivel' else 'niveles mezclados (serpentina)',
                     'Final', ('una carrera a %d vueltas' % c.get('torneo_final_laps', 10)) if (t.get('final') or {}).get('modo', 'una' if t['cars'] >= 6 else 'mangas') == 'una' else 'mangas seguidas (suma de vueltas)'])
-        H = ['Clase', 'Handicap (s por vuelta)']
+        H = list(handicap_mod.CSV_HEAD)
         w.writerow([]); w.writerow(['INSCRITOS', 'Piloto', 'Nivel', 'Resultado'])
         est = self.torneo_view()['estado']
         for p in g['pilots']: w.writerow(['', p['name'], NIVEL_TXT.get(p.get('nivel'), ''), est[str(p['slot'])]['texto']])
@@ -445,7 +450,7 @@ class TorneoMixin:
             w.writerow([]); w.writerow(['FINAL DEL TORNEO', 'Posición', 'Piloto', 'Nivel', 'Coche', 'Parte', 'Vueltas', 'Mejor vuelta (s)', 'Estado'] + H + ['Tiempo total real (s)', 'Tiempo total con handicap (s)'])
             for r in fr:
                 w.writerow(['', 'DSQ' if r['dsq'] else (r.get('pos') or ''), r['name'], NIVEL_TXT.get(self.pilot(r['slot']).get('nivel'), ''), r['car'], r.get('parte', 'Final'),
-                            r['laps'], f2(r['best']), 'DESCALIFICADO' if r['dsq'] else ''] + [r.get('clase_txt', ''), '%.2f' % r.get('h_s', 0.0)] + [f2(r.get('total')), f2(r.get('total_h'))])
+                            r['laps'], f2(r['best']), 'DESCALIFICADO' if r['dsq'] else ''] + handicap_mod.csv_cols(r) + [f2(r.get('total')), f2(r.get('total_h'))])
         w.writerow([]); w.writerow(['MANGAS', 'Ronda', 'Manga', 'Posición', 'Piloto', 'Nivel', 'Coche', 'Vueltas', 'Mejor vuelta (s)', 'Estado'] + H + ['Tiempo total real (s)', 'Tiempo total con handicap (s)', 'Resultado'])
         elim = {(e['slot'], e['parte']) for e in t['eliminados']}
         for ro in t['rondas']:
@@ -456,7 +461,7 @@ class TorneoMixin:
                     res = 'ELIMINADO (último)' if (r['slot'], run['label']) in elim else ('se salvó (regla de 6)' if r['slot'] in ro['salvados'] and r['slot'] == self.run_rows(run)[-1]['slot'] else '')
                     w.writerow(['', 'Final' if ro['final'] else ro['n'], run['label'], 'DSQ' if r['dsq'] else (r.get('pos') or ''), r['name'],
                                 NIVEL_TXT.get(self.pilot(r['slot']).get('nivel'), ''), r['car'], r['laps'], f2(r['best']), 'DESCALIFICADO' if r['dsq'] else '']
-                               + [r.get('clase_txt', ''), '%.2f' % r.get('h_s', 0.0)] + [f2(r.get('total')), f2(r.get('total_h')), res])
+                               + handicap_mod.csv_cols(r) + [f2(r.get('total')), f2(r.get('total_h')), res])
         w.writerow([]); w.writerow(['ELIMINADOS', 'Orden', 'Piloto', 'Ronda', 'Manga', 'Vueltas', 'Tiempo total real (s)', 'Tiempo total con handicap (s)'])
         for i, e in enumerate(t['eliminados'], 1): w.writerow(['', i, e['name'], e['ronda'], e['parte'], e['laps'], f2(e.get('total')), f2(e.get('total_h'))])
         notas = [ro['nota'] for ro in t['rondas'] if ro.get('nota')]

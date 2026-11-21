@@ -12,6 +12,7 @@ import durable
 from instancia import InstanceLock
 import micoche
 import torneo as torneo_mod
+import handicap as handicap_mod
 
 ROOT = Path(__file__).resolve().parent
 COLORS = [('Blanco','#edf2f7'),('Amarillo','#ffe23b'),('Rojo','#ff4d50'),('Azul','#3d96ff'),('Verde','#50dc92'),('Naranja','#ff963d')]
@@ -120,7 +121,8 @@ class Handler(BaseHTTPRequestHandler):
                 t=None if not g or g.get('mode')!='torneo' or g.get('status')=='cancelled' else {'id':g['id'],'pilots':[{'slot':p['slot'],'name':p['name'],'nivel':p.get('nivel'),'avatar':p.get('avatar') or ''} for p in g['pilots']]}
             return self.reply(200,{'torneo':t})
         if path=='/api/gp':return self.reply(200,self.server.gp.snapshot())
-        if path=='/api/inscritos':return self.reply(200,self.server.inscritos.read())
+        if path=='/api/inscritos':
+            revisar_niveles(self.server);return self.reply(200,self.server.inscritos.read())
         if path=='/api/gp/config':return self.reply(200,self.server.gp.get_config())
         if path=='/api/scx':return self.reply(200,self.server.scx.debug())
         if path=='/api/gatillo':return self.reply(200,self.server.scx.gatillo_view())   # velocímetro en vivo + «pide cambio» (~10 por segundo)
@@ -139,6 +141,7 @@ class Handler(BaseHTTPRequestHandler):
             file=ROOT/path[1:]
             if file.exists():return self.reply(200,file.read_bytes(),'audio/mpeg')
         if path=='/api/roster':
+            revisar_niveles(self.server)
             with LOCK: d=self.server.store.read()
             return self.reply(200,dict(d,colors=[{'name':n,'hex':h} for n,h in COLORS]))
         assets={'/':('index.html','text/html; charset=utf-8'),'/app.js':('app.js','text/javascript; charset=utf-8'),'/style.css':('style.css','text/css; charset=utf-8'),
@@ -199,6 +202,18 @@ class Handler(BaseHTTPRequestHandler):
             slot=payload.get('slot')
             if not isinstance(slot,int) or isinstance(slot,bool) or not 0<=slot<6:
                 return self.reply(400,{'error':'Máximo 6 competidores. No hay un séptimo espacio.'})
+            if payload.get('action') in ('nivel','nivel_descartar'):
+                # Nivel del piloto (Novato / Intermedio / Experto): se cambia solo, sin tocar nombre ni foto.
+                # «nivel_descartar»: quita el aviso de nivel sugerido / nivel cambiado sin cambiar nada.
+                nv=payload.get('nivel')
+                if payload['action']=='nivel' and nv not in handicap_mod.NIVEL_TXT: raise ValueError('Elige Novato, Intermedio o Experto.')
+                with LOCK:
+                    d=self.server.store.read()
+                    if not d['slots'][slot]: return self.reply(404,{'error':'Ese lugar ya no tiene piloto.'})
+                    if payload['action']=='nivel':d['slots'][slot]['nivel']=nv
+                    d['slots'][slot].pop('sugerido',None);d['slots'][slot].pop('nivel_cambio',None)
+                    d['version']+=1; self.server.store.write(d)
+                return self.reply(200,{'ok':True,'version':d['version']})
             with LOCK:
                 d=self.server.store.read(); previous=d['slots'][slot]
                 revision=previous['revision'] if previous else None
@@ -224,7 +239,9 @@ class Handler(BaseHTTPRequestHandler):
                         avatar='/avatars/'+uuid.uuid4().hex+'.png'
                         durable.escribir_bytes(self.server.store.directory/avatar[1:],raw)
                     if not avatar: raise ValueError('Falta la foto del rostro.')
-                    d['slots'][slot]={'name':name,'avatar':avatar,'revision':uuid.uuid4().hex}
+                    nv=payload.get('nivel',(previous or {}).get('nivel') or handicap_mod.NIVEL_DEFAULT)
+                    if nv not in handicap_mod.NIVEL_TXT: raise ValueError('Elige Novato, Intermedio o Experto.')
+                    d['slots'][slot]={'name':name,'avatar':avatar,'revision':uuid.uuid4().hex,'nivel':nv}
                 else: raise ValueError('Acción desconocida.')
                 d['version']+=1; self.server.store.write(d)
                 if old and (d['slots'][slot] is None or old!=d['slots'][slot]['avatar']):
@@ -238,6 +255,63 @@ class Handler(BaseHTTPRequestHandler):
         # No imprimir nombres, fotos ni datos enviados. Los sondeos frecuentes del tablero no llenan server.log.
         if len(args)>=2 and str(args[1])=='200' and any(x in str(args[0]) for x in ['GET /api/gp ','GET /api/scx ','GET /api/salud ','GET /api/live','GET /api/micoche','GET /api/roster ','GET /api/sensor ','GET /api/cruces','GET /api/gatillo','GET /scx/estado','GET /scx/eventos']):return
         print('%s %s' % (self.log_date_time_string(), fmt % args),flush=True)
+
+# ---------- Nivel automático por tiempo (registro de pilotos e inscritos del torneo) ----------
+NIVEL_LOCK=threading.Lock()
+def _sesiones_terminadas(server):
+    """[(clave, fuente, [(nombre, clase, mejor vuelta real, vueltas válidas)])] de lo que ya terminó."""
+    out=[];live=server.live;gpo=server.gp
+    with live.lock:
+        s=live.session
+        if s and s.get('phase')=='ended' and s.get('id'):
+            h=live.session_handicap(s);rows=[]
+            for p in s['pilots']:
+                laps=[l['s'] for l in p.get('laps') or [] if isinstance(l.get('s'),(int,float))]
+                rows.append((p['name'],handicap_mod.clase_de(h,live.car_of_slot(p['slot'])),min(laps) if laps else None,len(laps)))
+            out.append(('live:'+s['id'],('Carrera' if s.get('type')=='race' else 'Práctica')+time.strftime(' %d/%m %H:%M',time.localtime(s.get('created_at') or time.time())),rows))
+    with gpo.lock:
+        g=gpo.gp
+        if g and g.get('status')!='cancelled':
+            h=gpo.handicap();tq=gpo.es_torneo()
+            for run in g['runs']:
+                if run['phase']!='done' or run.get('skipped'):continue
+                rows=[]
+                for sl in run.get('participants') or []:
+                    d=run['data'].get(str(sl))
+                    if not isinstance(d,dict):continue
+                    laps=[l['s'] for l in d.get('laps') or [] if l.get('valid')]
+                    p=gpo.pilot(sl);rows.append((p['name'],handicap_mod.clase_de(h,gpo.car_of(run,sl)),min(laps) if laps else None,len(laps)))
+                out.append(('gp:%s:%s'%(g['id'],run['key']),('Torneo · ' if tq else 'Gran Premio · ')+run['label'],rows))
+    return out
+def revisar_niveles(server):
+    """Al terminar una Práctica/Carrera o cada parte del Gran Premio/torneo: con la mejor vuelta REAL (sin handicap)
+    de cada piloto y la clase de su coche, sugiere (o cambia, en modo «Cambiar solo») su nivel. Cada sesión una vez."""
+    if not NIVEL_LOCK.acquire(blocking=False):return
+    try:
+        h=server.lap_config.handicap()
+        if not h or h.get('nivel_auto','sugerir')=='apagado':return
+        hechos=server.niveles_hechos
+        nuevas=[x for x in _sesiones_terminadas(server) if x[0] not in hechos]
+        if not nuevas:return
+        ahora=time.time()
+        with LOCK:
+            d=server.store.read();ins=server.inscritos.read()['pilotos']
+            antes_d=json.dumps(d['slots'],sort_keys=True);antes_i=json.dumps(ins,sort_keys=True)
+            for clave,fuente,rows in nuevas:
+                for name,clase,best,n in rows:
+                    nm=name.casefold()
+                    for p in [x for x in d['slots'] if x]+ins:
+                        if p['name'].casefold()==nm:handicap_mod.aplicar_nivel(p,h,clase,best,n,fuente,ahora)
+                hechos.append(clave)
+            if json.dumps(d['slots'],sort_keys=True)!=antes_d:d['version']+=1;server.store.write(d)
+            if json.dumps(ins,sort_keys=True)!=antes_i:server.inscritos.write({'pilotos':ins})
+        del hechos[:-200]
+        try:durable.escribir_json(server.niveles_path,{'hechos':hechos},backup=False)
+        except OSError:pass
+    except Exception:
+        traceback.print_exc()
+    finally:
+        NIVEL_LOCK.release()
 
 def gp_busy(gp):
     run=gp.current()
@@ -311,6 +385,10 @@ def build_server(host,port,data,esp32_url,scx_port=None,scx_baud=57600,simulate=
         server.gp=GrandPrix(data,server.scx,server.live)
         # Torneo por mangas: pilotos inscritos con su nivel (data/inscritos.json).
         server.inscritos=torneo_mod.Inscritos(Path(data));server.avisos.extend(server.inscritos.avisos)
+        # Nivel automático por tiempo: sesiones ya revisadas (para no sugerir dos veces lo mismo).
+        server.niveles_path=Path(data)/'niveles_revisados.json'
+        nh,_=durable.leer_json(server.niveles_path,validate=lambda x:x if isinstance(x,dict) and isinstance(x.get('hechos'),list) else (_ for _ in ()).throw(ValueError('x')),nombre='niveles_revisados.json')
+        server.niveles_hechos=[str(k) for k in (nh or {}).get('hechos',[])][-200:]
         # ESP32 del sensor por cable USB (solo lectura, solo para la 💥 explosión al instante). Nunca la tarjeta SCX.
         usb_off=simulate or (isinstance(esp32_usb,str) and esp32_usb.strip().lower() in USB_OFF) or esp32_usb is False
         usb_port=None if usb_off or esp32_usb in (None,True) or str(esp32_usb).strip().lower()=='auto' else str(esp32_usb)

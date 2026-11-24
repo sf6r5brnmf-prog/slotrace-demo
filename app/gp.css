@@ -214,3 +214,8 @@ button.tq-p{cursor:pointer}.tq-p.sel{outline:3px solid var(--lime);outline-offse
 .tq-item{flex-wrap:wrap}.tq-sug{flex-basis:100%;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#2a2410;border:1px solid #f5c54266;color:#f5d77a;border-radius:8px;padding:6px 8px;font-size:14px}
 .tq-sug.cambio{background:#132a1c;border-color:#2fbf7166;color:#7fe0a5}.tq-sug button{min-height:40px;padding:4px 12px;border-radius:8px}.tq-sug span{flex:1;min-width:150px}
 .pick-sel .nv-sel{font:16px system-ui;background:#0b0d11;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:9px}
+/* Torneo: mando + coche por piloto en cada manga; sortear mandos */
+.tq-psel{display:flex;flex-direction:column;gap:4px;flex:0 0 auto;max-width:46%;min-width:0}.tq-psel .tq-carsel{min-height:36px}.tq-psel .gar-sel{padding:6px;font-size:13px}
+.tq-sortear{margin-top:8px;width:100%}.tq-item .tq-gar-sel{flex:1 1 100%;margin-top:4px;font-size:14px;padding:7px}
+.tq-item{flex-wrap:wrap}
+@media (max-width:600px){.tq-prow{flex-direction:column}.tq-psel{max-width:none;flex-direction:row}.tq-psel>*{flex:1 1 0;min-width:0}.tq-carsel{max-width:none}}

@@ -86,3 +86,15 @@
 .tq-gar{font-size:12px;color:#cfd6e0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40%}
 .car-selects{flex-wrap:wrap}
 @media(max-width:900px){.tq-garage-g{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:640px){.tq-garage-g{grid-template-columns:1fr}}
+/* 🎲 Sortear mandos + mando y coche por piloto + alta rápida de coche de invitado */
+.sortear-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 10px;flex:1 1 100%;grid-column:1/-1}.sortear-bar .help,.sortear-bar .muted{margin:0;flex:1 1 200px;min-width:0}
+.sortear-btn{background:#2a2410;border-color:#ffd54a;color:#ffd54a}.sortear-btn:hover{border-color:#fff}
+.participant-pick{display:flex;gap:6px;flex:1 1 100%;min-width:0;margin-top:2px}.participant-pick>*{min-width:0}
+.participant-mando{font:15px system-ui;background:#0b0d11;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:9px;flex:0 0 auto;max-width:42%}
+.participant-pick .participant-garage{flex:1 1 auto;margin-top:0}
+.gq-bg{position:fixed;inset:0;z-index:9000;background:#000a;display:flex;align-items:center;justify-content:center;padding:14px}
+.gq{background:var(--panel);border:1px solid var(--line);border-top:4px solid #ffb02e;border-radius:14px;padding:18px;width:min(420px,100%);max-height:94vh;overflow:auto;display:grid;gap:12px}
+.gq h3{margin:0;font-size:20px}.gq .help{margin:0;color:var(--muted);font-size:13px}.gq-f{display:grid;gap:6px;font-weight:700;font-size:14px}
+.gq-f input:not([type=checkbox]),.gq-f select{font:16px system-ui;background:#0b0d11;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:10px;min-width:0;width:100%}
+.gq-err{color:#ff8179;margin:0;min-height:1em;font-size:14px}.gq-btns{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}.gq-ok{background:var(--lime);color:#11150b;border-color:var(--lime)}
+.gar-sel optgroup{font-weight:800}

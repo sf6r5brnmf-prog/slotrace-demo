@@ -7,6 +7,7 @@ import durable
 import pits as pits_mod
 import handicap as handicap_mod
 import torneo as torneo_mod
+import garage as garage_mod
 
 DEFAULTS = {
     'preset': 'estandar',
@@ -199,7 +200,7 @@ class GrandPrix(torneo_mod.TorneoMixin):
     def _new_data(self): return {'laps': [], 'sospechosas': [], 'paradas': [], 'started': False, 'last_cross': None, 'false_start': False, 'penalty': 0, 'finished_at': None, 'finish_pos': None, 'done': False}
     def _reset_run(self, run):
         self._close_run_pits(run, 'cierre')
-        run.pop('red', None)
+        run.pop('red', None); run.pop('h_gar', None)
         run.update(phase='ready', countdown_until=None, green_at=None, ends_at=None, deadline=None, winner_at=None, ir_base=None, finishers=0)
         run['data'] = {str(s): self._new_data() for s in (run['participants'] or [])}
 
@@ -261,12 +262,13 @@ class GrandPrix(torneo_mod.TorneoMixin):
                 cfg = copy.deepcopy(self.config)
                 if g: self._archive()
                 pilots = []
+                uso = self._uso()   # coche del Garage que escogió cada piloto (va con el piloto, no con el mando)
                 for i in ids:
                     src = self.directory / roster['slots'][i]['avatar'].lstrip('/'); avatar = '/avatars/' + uuid.uuid4().hex + '.png'
                     try: shutil.copyfile(src, self.directory / avatar.lstrip('/'))
                     except OSError: avatar = roster['slots'][i]['avatar']
                     pilots.append({'slot': i, 'name': roster['slots'][i]['name'], 'avatar': avatar, 'car': cars.get(str(i), i + 1),
-                                   'nivel': handicap_mod.nivel_ok(roster['slots'][i].get('nivel'))})
+                                   'nivel': handicap_mod.nivel_ok(roster['slots'][i].get('nivel')), 'garage_id': uso.get(str(i)) or ''})
                 order = list(ids)
                 if cfg['quali_order'] == 'azar':
                     import random; random.shuffle(order)
@@ -295,6 +297,14 @@ class GrandPrix(torneo_mod.TorneoMixin):
                 if not g.get('handicap_fijo'):
                     # El handicap (ajuste por vuelta) queda fijo al arrancar la primera parte del Gran Premio.
                     g['handicap'] = self.handicap(); g['handicap_fijo'] = True
+                # El coche del Garage de cada piloto queda fijo en cada parte (en el torneo se puede cambiar entre mangas).
+                if self.es_torneo():
+                    ids = [self.pilot(x).get('garage_id') for x in run['participants'] or [] if self.pilot(x).get('garage_id')]
+                    rep = next((x for x in ids if ids.count(x) > 1), None)
+                    if rep:
+                        quien = [self.pilot(x)['name'] for x in run['participants'] if self.pilot(x).get('garage_id') == rep]
+                        raise GPError('%s llevan el mismo coche en esta manga. Cambien uno antes de Empezar.' % ' y '.join(quien), 409)
+                run['h_gar'] = self.gar_entradas(run['participants'] or [])
                 if g['config']['lights_enabled']:
                     run.update(phase='countdown', countdown_until=time.monotonic() + g['config']['lights_seconds'], countdown_total=g['config']['lights_seconds'])
                     self._event('countdown', text=run['label'])
@@ -334,7 +344,7 @@ class GrandPrix(torneo_mod.TorneoMixin):
             elif action == 'next':
                 if not run or run['phase'] != 'done': raise GPError('Termina esta parte antes de pasar a la siguiente.')
                 self._advance()
-            elif action in ('swap', 'set_car'):
+            elif action in ('swap', 'set_car', 'set_garage', 'sortear'):
                 if not self.es_torneo(): raise GPError('Solo en el torneo por mangas.')
                 try: self.torneo_command(action, payload)
                 except torneo_mod.TorneoError as e: raise GPError(str(e), e.status)
@@ -726,6 +736,25 @@ class GrandPrix(torneo_mod.TorneoMixin):
     def close(self): self.stop_event.set(); self.worker.join(timeout=2); self._flush()
 
     # ---------- handicap (ajuste de tiempo por vuelta) ----------
+    def _uso(self):
+        fn = getattr(self, 'garage_read', None)
+        try: return dict((fn() or {}).get('uso') or {}) if fn else {}
+        except Exception: return {}
+    def gar_entradas(self, slots=None):
+        """{'p<slot>': ficha} del coche del Garage que lleva cada piloto (garage_id)."""
+        g = self.gp; fn = getattr(self, 'garage_read', None)
+        if not g or not fn: return {}
+        mapa = {p['slot']: p['garage_id'] for p in g['pilots'] if p.get('garage_id') and (slots is None or p['slot'] in slots)}
+        if not mapa: return {}
+        try: return garage_mod.entradas(fn(), mapa)
+        except Exception: return {}
+    def handicap_run(self, run=None):
+        """Handicap del GP + el coche del Garage de cada piloto (fijo en cada parte al arrancarla)."""
+        h = self.handicap()
+        if h is None or not self.gp: return h
+        return handicap_mod.con_pilotos(h, run['h_gar'] if run is not None and 'h_gar' in run else self.gar_entradas())
+    def hk(self, h, run, slot):
+        return handicap_mod.clave(h, slot, self.car_of(run, slot))
     def handicap_actual_cfg(self):
         fn = getattr(self, 'handicap_actual', None)   # server.wire: lap_config.handicap (data/vueltas.json)
         try: return fn() if fn is not None else None
@@ -743,7 +772,8 @@ class GrandPrix(torneo_mod.TorneoMixin):
         g = self.gp; c = g['config'] if g else self.config
         return int(c.get('torneo_final_laps', 10)) if self.es_torneo() else c['final_laps']
     def h_s(self, slot, run=None):
-        return handicap_mod.seg_de(self.handicap(), self.car_of(run, slot), self.nivel_of(slot))
+        h = self.handicap_run(run)
+        return handicap_mod.seg_de(h, self.hk(h, run, slot), self.nivel_of(slot))
     def nivel_of(self, slot):
         p = next((x for x in (self.gp or {}).get('pilots') or [] if x['slot'] == slot), None)
         return handicap_mod.nivel_ok((p or {}).get('nivel'))
@@ -751,9 +781,10 @@ class GrandPrix(torneo_mod.TorneoMixin):
         g = self.gp
         if not g: return False
         # Torneo: todos los coches pasan por todos los pilotos; un solo criterio para todo el torneo (coches 1 a 6).
-        if self.es_torneo(): return handicap_mod.activo(self.handicap(), list(range(1, 7)), [p.get('nivel') for p in g['pilots']])
+        h = self.handicap_run(run)
+        if self.es_torneo(): return handicap_mod.activo(h, list(range(1, 7)) + list(((h or {}).get('garage') or {}).keys()), [p.get('nivel') for p in g['pilots']])
         slots = [p['slot'] for p in g['pilots']] if slots is None else slots
-        return handicap_mod.activo(self.handicap(), [self.car_of(run, s) for s in slots], [self.nivel_of(s) for s in slots])
+        return handicap_mod.activo(h, [self.hk(h, run, s) for s in slots], [self.nivel_of(s) for s in slots])
     def total(self, run, slot):
         laps = [l['s'] for l in run['data'][str(slot)]['laps'] if l['valid']]
         return (round(sum(laps), 3), len(laps)) if laps else (None, 0)
@@ -783,7 +814,7 @@ class GrandPrix(torneo_mod.TorneoMixin):
                         'dsq': bool(isinstance(dd, dict) and dd.get('dsq')), 'banderas': dd.get('banderas', 0) if isinstance(dd, dict) else 0,
                         'sospechosas_n': len(run['data'][str(p['slot'])].get('sospechosas') or []) if run and str(p['slot']) in run['data'] else 0,
                         'done': bool(run and run['phase'] == 'done'), 'skipped': bool(run and run.get('skipped'))})
-            hi = handicap_mod.info(self.handicap(), p['car'], p.get('nivel')); res[-1].update(hi, best_h=handicap_mod.mas(res[-1]['best'], hi['h_s']))
+            hh = self.handicap_run(); hi = handicap_mod.info(hh, self.hk(hh, None, p['slot']), p.get('nivel')); res[-1].update(hi, best_h=handicap_mod.mas(res[-1]['best'], hi['h_s']))
         order = g['order']
         b = 'best_h' if self.h_on() else 'best'   # con handicap: mejor vuelta + segundos de su clase
         res.sort(key=lambda r: (r['dsq'], r[b] is None, r[b] or 0, order.index(r['slot'])))   # DSQ = al final
@@ -802,7 +833,7 @@ class GrandPrix(torneo_mod.TorneoMixin):
                 if b is not None and (best is None or b < best): best = b
             dsq = any(isinstance(r['data'].get(str(s)), dict) and r['data'][str(s)].get('dsq') for r in heats)
             tot = [self.total(r, s) for r in heats if str(s) in r['data']]; tsum = round(sum(t for t, n in tot if t is not None), 3) if any(t is not None for t, n in tot) else None
-            hi = handicap_mod.info(self.handicap(), p['car'], p.get('nivel'))
+            hh = self.handicap_run(); hi = handicap_mod.info(hh, self.hk(hh, None, s), p.get('nivel'))
             th = [x for x in (self.total_h(r, s) for r in heats if str(s) in r['data']) if x is not None]
             res.append(dict(hi, slot=s, laps=laps, best=best, rounds=per, dsq=dsq, best_h=handicap_mod.mas(best, hi['h_s']), total=tsum,
                             total_h=round(sum(th), 3) if th else None))
@@ -829,7 +860,7 @@ class GrandPrix(torneo_mod.TorneoMixin):
                          'sospechosas_n': len(d.get('sospechosas') or []),
                          'dsq': bool(d.get('dsq')), 'banderas': d.get('banderas', 0),
                          'pits': self._pits_view(d, pcar)})
-            hi = handicap_mod.info(self.handicap(), pcar, self.nivel_of(s)); r = rows[-1]; h = hi['h_s']
+            hh = self.handicap_run(run); hi = handicap_mod.info(hh, self.hk(hh, run, s), self.nivel_of(s)); r = rows[-1]; h = hi['h_s']
             r.update(hi, best_h=handicap_mod.mas(r['best'], h), last_h=handicap_mod.mas(r['last'], h), total=self.total(run, s)[0], total_h=self.total_h(run, s),
                      lap_list=[dict(l, sh=handicap_mod.mas(l['s'], h)) for l in r['lap_list']], cruce_pos=d['finish_pos'])
         hon = self.h_on(run['participants'] or [], run)
@@ -869,8 +900,8 @@ class GrandPrix(torneo_mod.TorneoMixin):
             for k in PIT_KEYS: v['config'].setdefault(k, DEFAULTS[k])   # GP guardado antes del tiempo en pits
             for k in TIRE_KEYS: v['config'].setdefault(k, DEFAULTS[k])   # GP guardado antes de la vida de llanta
             v['sospechosas'] = self.suspicious_rows()
-            hcfg = self.handicap()
-            for p in v['pilots']: p.update(handicap_mod.info(hcfg, p['car'], p.get('nivel')))
+            hcfg = self.handicap_run()
+            for p in v['pilots']: p.update(handicap_mod.info(hcfg, self.hk(hcfg, None, p['slot']), p.get('nivel')))
             v['handicap'] = {'on': self.h_on(), 'enabled': bool(hcfg and hcfg.get('enabled')), 'resumen': handicap_mod.resumen(hcfg),
                              'seg': (hcfg or handicap_mod.OFF)['seg'], 'fijo': bool(g.get('handicap_fijo'))}
             v['runs'] = [{'key': r['key'], 'kind': r['kind'], 'label': r['label'], 'phase': r['phase'], 'skipped': r.get('skipped', False)} for r in g['runs']]
@@ -957,10 +988,10 @@ class GrandPrix(torneo_mod.TorneoMixin):
                 w.writerow(['', run['label'], name[s], self.car_of(run, s), d.get('banderas', 0), 'DESCALIFICADO' if q else '', hora_f(q.get('at')), q.get('laps', '') if q else '', q.get('ignored', '') if q else ''])
         if not anyf: w.writerow(['', 'ninguna'])
         w.writerow([]); w.writerow(['VUELTAS', 'Parte', 'Piloto', 'Vuelta', 'Tiempo (s)', 'km/h escala', 'Válida'] + H + ['Tiempo con handicap (s)'])
-        hcfg = self.handicap()
         for run in g['runs']:
+            hcfg = self.handicap_run(run)
             for s in run['participants'] or []:
-                hi = handicap_mod.info(hcfg, self.car_of(run, s), self.nivel_of(s))
+                hi = handicap_mod.info(hcfg, self.hk(hcfg, run, s), self.nivel_of(s))
                 for l in run['data'][str(s)]['laps']: w.writerow(['', run['label'], name[s], l['n'], f2(l['s']), l['kmh'], 'sí' if l['valid'] else 'anulada'] + hc(hi) + [f2(handicap_mod.mas(l['s'], hi['h_s']))])
         if g.get('interrumpidas'):
             # Vueltas de partes cortadas por un reinicio del servidor (no cuentan para el resultado; se repitieron).

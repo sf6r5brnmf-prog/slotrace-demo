@@ -72,6 +72,8 @@ def limpiar_inscritos(raw):
         if nivel not in NIVEL_TXT: raise TorneoError('Nivel inválido para %s: Novato, Intermedio o Experto.' % name)
         pid = p.get('id') if isinstance(p.get('id'), str) and re.fullmatch(r'[a-z0-9]{1,16}', p.get('id') or '') else uuid.uuid4().hex[:10]
         q = {'id': pid, 'name': name, 'nivel': nivel}
+        gid = p.get('garage_id')   # su coche del Garage (casa o invitados): lo lleva a todas sus mangas
+        if isinstance(gid, str) and re.fullmatch(r'[0-9a-f]{12}', gid): q['garage_id'] = gid
         for k in ('sugerido', 'nivel_cambio'):   # nivel automático por tiempo (ver handicap.aplicar_nivel)
             x = handicap_mod.limpiar_sugerido(p.get(k))
             if x: q[k] = x
@@ -133,6 +135,8 @@ class TorneoMixin:
         if g: self._archive()
         # Foto del registro si el nombre coincide con un piloto registrado (si no, la pantalla dibuja un casco).
         reg = {p['name'].strip().casefold(): p for p in (roster or {}).get('slots', []) if p}
+        uso = self._uso() if hasattr(self, '_uso') else {}
+        reg_i = {p['name'].strip().casefold(): i for i, p in enumerate((roster or {}).get('slots', [])) if p}
         pilots = []
         for i, p in enumerate(lista):
             avatar = ''
@@ -141,7 +145,9 @@ class TorneoMixin:
                 src = self.directory / rp['avatar'].lstrip('/'); avatar = '/avatars/' + uuid.uuid4().hex + '.png'
                 try: shutil.copyfile(src, self.directory / avatar.lstrip('/'))
                 except OSError: avatar = rp['avatar']
-            pilots.append({'slot': i, 'name': p['name'], 'avatar': avatar or casco_svg(p['name'], p['nivel']), 'car': None, 'nivel': p['nivel'], 'ins_id': p['id']})
+            gid = p.get('garage_id') or uso.get(str(reg_i.get(p['name'].casefold()))) or ''
+            pilots.append({'slot': i, 'name': p['name'], 'avatar': avatar or casco_svg(p['name'], p['nivel']), 'car': None, 'nivel': p['nivel'], 'ins_id': p['id'],
+                           'garage_id': gid})
         gt = getattr(self.scx, 'gatillo', None)
         if gt is not None: gt.reset_session()
         self.gp = g = {'id': uuid.uuid4().hex, 'created_at': time.time(), 'status': 'active', 'config': cfg, 'pilots': pilots,
@@ -320,6 +326,31 @@ class TorneoMixin:
             if ri == g['current']: self._prepare(run)
             g['notice'] = '%s corre con el coche %d en %s.' % (self.pilot(s)['name'], car, run['label'])
             return
+        if action == 'set_garage':
+            # El piloto cambia su coche (del Garage de la casa o de invitados) y lo lleva a sus siguientes mangas.
+            s, gid = payload.get('slot'), payload.get('garage_id') or ''
+            if type(s) != int or not any(p['slot'] == s for p in g['pilots']): raise TorneoError('Piloto inválido.')
+            if gid and not (isinstance(gid, str) and re.fullmatch(r'[0-9a-f]{12}', gid)): raise TorneoError('Coche inválido.')
+            ri = self._run_de(ronda, s)
+            if ri is not None:
+                run = g['runs'][ri]
+                if run['phase'] != 'ready' or ri < g['current']: raise TorneoError('Su manga ya arrancó: el cambio de coche vale para la siguiente.')
+                otro = next((x for x in run['participants'] if x != s and gid and self.pilot(x).get('garage_id') == gid), None)
+                if otro is not None: raise TorneoError('Ese coche ya está en uso con %s en esta manga.' % self.pilot(otro)['name'], 409)
+            self.pilot(s)['garage_id'] = gid
+            g['notice'] = '%s cambió de coche.' % self.pilot(s)['name']
+            return
+        if action == 'sortear':
+            # Sortear mandos de una manga que no ha arrancado: a cada piloto le toca un mando distinto (1 a 6) al azar.
+            ri = payload.get('index', g['current'])
+            if type(ri) != int or ri not in ronda['runs']: raise TorneoError('Esa manga no es de esta ronda.')
+            run = g['runs'][ri]
+            if run['phase'] != 'ready' or ri < g['current']: raise TorneoError('Solo se sortea en mangas que no han arrancado.')
+            mandos = random.sample(range(1, 7), len(run['participants']))
+            for x, m in zip(run['participants'], mandos): run['cars'][str(x)] = m
+            if ri == g['current']: self._prepare(run)
+            g['notice'] = 'Mandos sorteados en %s: %s.' % (run['label'], ', '.join('%s → %d' % (self.pilot(x)['name'], run['cars'][str(x)]) for x in run['participants']))
+            return
         raise TorneoError('Acción desconocida.')
 
     # ---------- vistas ----------
@@ -343,13 +374,12 @@ class TorneoMixin:
     def torneo_view(self):
         g = self.gp; t = self._t(); cur = g['current']
         elim = {e['slot']: e for e in t['eliminados']}
-        hcfg = self.handicap()
         def fila(run, r):
             p = self.pilot(r['slot'])
             return {'slot': r['slot'], 'name': p['name'], 'nivel': p.get('nivel'), 'car': r['car'], 'avatar': p.get('avatar') or '',
                     'clase': r.get('clase'), 'clase_txt': r.get('clase_txt'), 'h_s': r.get('h_s', 0.0), 'h_coche': r.get('h_coche', 0.0),
                     'h_nivel': r.get('h_nivel', 0.0), 'nivel_txt': r.get('nivel_txt'), 'h_txt': r.get('h_txt', ''), 'laps': r['laps'], 'best': r['best'],
-                    'coche_nombre': (handicap_mod.garage_de(hcfg, r['car']) or {}).get('nombre') or '',
+                    'coche_nombre': r.get('coche_nombre') or '', 'garage_id': p.get('garage_id') or '', 'garage_run': r.get('garage_id') or '',
                     'total': r.get('total'), 'total_h': r.get('total_h'), 'pos': r.get('pos'), 'dsq': r.get('dsq'), 'finished': r.get('finished'),
                     'eliminado': r['slot'] in elim and elim[r['slot']]['parte'] == run['label']}
         rondas = []
@@ -357,11 +387,12 @@ class TorneoMixin:
             mangas = []
             for ri in ro['runs']:
                 run = g['runs'][ri]
+                hcfg = self.handicap_run(run)
                 if run['phase'] == 'ready':
                     pil = []
                     for s in run['participants']:
                         p = self.pilot(s); car = run['cars'][str(s)]
-                        pil.append(dict(handicap_mod.info(hcfg, car, p.get('nivel')), slot=s, name=p['name'], nivel=p.get('nivel'), car=car, avatar=p.get('avatar') or '',
+                        pil.append(dict(handicap_mod.info(hcfg, handicap_mod.clave(hcfg, s, car), p.get('nivel')), garage_run=p.get('garage_id') or '', slot=s, name=p['name'], nivel=p.get('nivel'), car=car, avatar=p.get('avatar') or '',
                                         laps=None, best=None, total=None, total_h=None, pos=None, dsq=False, finished=False, eliminado=False))
                 else:
                     pil = [fila(run, r) for r in self.run_rows(run)]

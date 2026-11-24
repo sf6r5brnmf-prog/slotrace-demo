@@ -31,10 +31,10 @@ function renderSetup(force){
   if(!ins){loadIns().then(()=>{if(ins)renderSetup(true);});return;}
   const c=cfgT(),n=ins.pilotos.length;
   const sig=JSON.stringify([ins.version,ins.pilotos,c,addLevel,(PeluGarage.data||{}).version]);if(!force&&sig===setupSig)return;setupSig=sig;
-  // 🏎️ Coches del Garage en pista: en el torneo los mandos se reparten por manga; cada mando corre con SU coche del Garage.
-  const tg=$('tqGarage');if(tg&&!tg.contains(document.activeElement)){tg.replaceChildren();tg.hidden=!PeluGarage.cars().length;
-    if(PeluGarage.cars().length){tg.append(el('p','tq-garage-t','🏎️ Coches del Garage en cada mando (su clase y su hándicap propio cuentan en cada manga):'));
-      const gr=el('div','tq-garage-g');for(let k=1;k<=Math.max(2,Math.min(6,c.torneo_cars||3));k++){const r=el('label','tq-garage-r');r.append(carChip(k),PeluGarage.select(k,()=>renderSetup(true),m=>{$('tqError').textContent=m;}));gr.append(r);}tg.append(gr);}}
+  // 🏎️ El mando NO se queda con el coche: cada piloto lleva SU coche (casa o invitados) a todas sus mangas;
+  // el mando se sortea o se elige en cada manga, antes de Empezar.
+  const tg=$('tqGarage');if(tg){tg.replaceChildren();tg.hidden=false;
+    tg.append(el('p','tq-garage-t','🏎️ Cada piloto escoge su coche abajo (del Garage de la casa, de invitados o uno nuevo) y lo lleva a todas sus mangas. El mando se sortea o se elige en cada manga.'));}
   // Formato: coches por manga, minutos, cómo se arman, vueltas de la final (se guarda en la configuración del GP).
   const cf=$('tqConfig');if(!cf.contains(document.activeElement)){cf.replaceChildren();
     const row=(label,input,note)=>{const r=el('label','tq-cfg');r.append(el('span','',label),input);if(note)r.append(el('small','muted',note));cf.append(r);};
@@ -58,6 +58,13 @@ function renderSetup(force){
       nm.addEventListener('change',()=>{const q=ins.pilotos[i];const v=nm.value.replace(/\s+/g,' ').trim().slice(0,24);if(!q||!v){nm.value=q?q.name:'';return;}q.name=v;saveIns();});
       const del=el('button','tq-del','✕');del.type='button';del.setAttribute('aria-label','Quitar a '+p.name);del.addEventListener('click',()=>{ins.pilotos.splice(i,1);saveIns();renderSetup(true);});
       li.append(el('b','tq-num',String(i+1)),nm,levelPicker(p.nivel,k=>{const q=ins.pilotos[i];if(q){q.nivel=k;delete q.sugerido;delete q.nivel_cambio;saveIns();}renderSetup(true);},true),del);
+      // Su coche: puede repetirse entre pilotos de mangas distintas (en una misma manga, no).
+      const otros={};ins.pilotos.forEach((x,k)=>{if(k!==i&&x.garage_id)otros[x.garage_id]=(otros[x.garage_id]?otros[x.garage_id]+', ':'')+x.name;});
+      const gp=PeluGarage.picker({cur:p.garage_id||'',usados:{},aria:'Coche de '+p.name,dueno:p.name,onError:m=>{$('tqError').textContent=m;},
+        onPick:async id=>{const q=ins.pilotos[i];if(q){if(id)q.garage_id=id;else delete q.garage_id;saveIns();}},
+        onNuevo:async datos=>{const d=await PeluGarage.post({action:'rapido',car:datos});const q=ins.pilotos[i];if(q){q.garage_id=d.saved;saveIns();}}});
+      gp.classList.add('tq-gar-sel');[...gp.querySelectorAll('option')].forEach(o=>{if(otros[o.value])o.textContent+=' · también '+otros[o.value];});
+      li.append(gp);
       // Nivel sugerido por sus tiempos (o cambiado solo, en modo «Cambiar solo»).
       const sg=p.sugerido,ch=p.nivel_cambio;
       if((sg&&sg.nivel!==p.nivel)||ch){const s=el('div','tq-sug'+(sg?'':' cambio'));
@@ -138,9 +145,16 @@ function heatBox(g,m,ro,opts){
   const head=el('div','tq-hhead');head.append(el('strong','',m.label.replace(/^Ronda \d+ · /,'')),el('span','tq-ph tq-ph-'+m.phase,ph));box.append(head);
   const showRes=m.phase!=='ready';
   m.pilotos.forEach(p=>{const r=pilotRow(m,p,opts.edit&&m.editable,showRes);
-    if(opts.edit&&m.editable){const cs=el('select','tq-carsel');cs.setAttribute('aria-label','Coche de '+p.name);for(let k=1;k<=6;k++){const gc=PeluGarage.on(k);const o=el('option','','Coche '+k+(gc?' · 🏎️ '+gc.nombre:''));o.value=k;cs.append(o);}cs.value=String(p.car);
+    if(opts.edit&&m.editable){const cs=el('select','tq-carsel');cs.setAttribute('aria-label','Mando de '+p.name);for(let k=1;k<=6;k++){const o=el('option','','🎮 Mando '+k);o.value=k;cs.append(o);}cs.value=String(p.car);
       cs.addEventListener('click',e=>e.stopPropagation());cs.addEventListener('change',()=>act('set_car',{slot:p.slot,car:Number(cs.value)}));
-      const w=el('div','tq-prow');w.append(r,cs);box.append(w);}else box.append(r);});
+      // Su coche (lo trae de su manga anterior; se puede cambiar antes de Empezar). En la misma manga, un coche por piloto.
+      const usados={};m.pilotos.forEach(x=>{if(x.slot!==p.slot&&x.garage_run)usados[x.garage_run]=x.name;});
+      const gs=PeluGarage.picker({cur:p.garage_run||'',usados,aria:'Coche de '+p.name,dueno:p.name,onError:t=>toast(t),
+        onPick:async id=>{await act('set_garage',{slot:p.slot,garage_id:id});},
+        onNuevo:async datos=>{const d=await PeluGarage.post({action:'rapido',car:datos});await act('set_garage',{slot:p.slot,garage_id:d.saved});}});
+      gs.classList.add('tq-gar-sel');
+      const w=el('div','tq-prow');const sl=el('div','tq-psel');sl.append(cs,gs);w.append(r,sl);box.append(w);}else box.append(r);});
+  if(opts.edit&&m.editable&&m.pilotos.length){const sb=el('button','sortear-btn tq-sortear','🎲 Sortear mandos');sb.type='button';sb.addEventListener('click',()=>act('sortear',{index:m.index}));box.append(sb);}
   if(m.phase==='done'&&!ro.cerrada&&!ro.final&&m.pilotos.length>1){const u=m.pilotos[m.pilotos.length-1];box.append(el('p','tq-last','Último: '+u.name+' → eliminado al cerrar la ronda'+(ro.vivos-ro.mangas.filter(x=>x.pilotos.length>1).length<FIN?' (salvo la regla de 6)':'')));}
   return box;
 }

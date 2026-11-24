@@ -1,9 +1,15 @@
 """🏎️ Garage: los coches físicos disponibles, cada uno con su ficha y su propio hándicap.
 
-data/garage.json = {'version', 'cars': [ficha], 'pista': {'1'..'6': id del coche que corre con ese mando},
+Dos garages: «Garage de la casa» (tipo 'casa') y «Garage de invitados» (tipo 'invitado': el coche que trae un
+piloto invitado, ligado a su dueño). Un coche de invitado se puede pasar a la casa o borrar después del evento.
+
+El MANDO no se queda con el coche: en cada carrera o manga el piloto escoge (o le toca por sorteo) un mando y lo
+vincula a su coche o a uno del Garage. Por eso el coche va con el PILOTO:
+data/garage.json = {'version', 'cars': [ficha], 'uso': {'0'..'5': id del coche que lleva el piloto de ese lugar del registro},
                     'historial': [registro por carrera terminada], 'hechos': [claves ya registradas]}
 Fotos: data/garage-fotos/<hex>.jpg (en la DEMO, data/ vive en IndexedDB del navegador).
 
+El chip (mando habitual) es solo informativo: en SCX Digital el coche se empareja con cualquier mando.
 Hándicap total por vuelta = clase del coche (Configuración) + hándicap PROPIO del coche + nivel del piloto.
 Sin coche del Garage en un mando, todo funciona como antes (la clase del mando en Configuración).
 """
@@ -84,24 +90,19 @@ def limpiar_coche(c, prev=None):
         if tx: out['notas'].append({'fecha': f, 'texto': tx})
     out['notas'].sort(key=lambda n: n['fecha'], reverse=True)
     out['foto'] = prev.get('foto') or ''
+    out['tipo'] = c.get('tipo', prev.get('tipo', 'casa'))
+    if out['tipo'] not in ('casa', 'invitado'): raise GarageError('Garage inválido: casa o invitados.')
     out['ejemplo'] = bool(c.get('ejemplo', prev.get('ejemplo', False)))
     out['creado'] = prev.get('creado') or round(time.time())
     return out
 
 
-def efectivo(h, g):
-    """Handicap de vueltas.json + los coches del Garage que están en pista: la clase del mando la pone el coche,
-    y se agregan h['propio'] {mando: segundos} y h['garage'] {mando: {id, nombre}}. Se congela con la sesión."""
-    if h is None or not g: return h
-    cars = {c['id']: c for c in g.get('cars') or []}
-    out = copy.deepcopy(h); propio = {}; gar = {}
-    for k, cid in (g.get('pista') or {}).items():
+def entradas(g, mapa):
+    """{'p<slot>': ficha} para handicap.con_pilotos: mapa = {slot: id del coche}. Los ids que ya no existen se ignoran."""
+    cars = {c['id']: c for c in (g or {}).get('cars') or []}; out = {}
+    for slot, cid in (mapa or {}).items():
         c = cars.get(cid)
-        if not c: continue
-        out.setdefault('clases', {})[str(k)] = c['clase']
-        if c.get('h'): propio[str(k)] = c['h']
-        gar[str(k)] = {'id': c['id'], 'nombre': c['nombre']}
-    if gar: out['propio'] = propio; out['garage'] = gar
+        if c: out['p%s' % slot] = {'id': c['id'], 'nombre': c['nombre'], 'clase': c['clase'], 'h': c.get('h') or 0.0, 'tipo': c.get('tipo') or 'casa'}
     return out
 
 
@@ -113,6 +114,9 @@ EJEMPLOS = [
     ('Sombra Negra (ejemplo)', 'Negro Team', '#212121', 'con_iman', 0.0, 4, '#ff9800', 'Estándar 18k', 77, 'Club', ''),
     ('Lima Verde (ejemplo)', 'Verde GP', '#43a047', 'sin_iman', -0.2, 5, '#e91e63', 'Estándar 18k', 72, 'Club', 'Cambio de llantas'),
     ('Nube Blanca (ejemplo)', 'Blanco Motorsport', '#eeeeee', 'sin_iman', 0.1, 6, '#2196f3', 'Estándar 18k', 75, 'Club', ''),
+    # Garage de invitados: coches que traen los pilotos invitados (ligados a su dueño)
+    ('Bala Naranja (ejemplo invitado)', 'Invitados', '#fb8c00', 'con_iman', 0.0, None, '', 'Estándar 18k', 76, 'Invitado Luis', ''),
+    ('Cometa Morado (ejemplo invitado)', 'Invitados', '#8e24aa', 'sin_iman', 0.3, None, '', '', None, 'Invitada Sofía', ''),
 ]
 
 
@@ -123,11 +127,13 @@ class Garage:
         self.path = self.directory / 'garage.json'; self.lock = threading.RLock()
         d, aviso = durable.leer_json(self.path, validate=self.check, nombre='garage.json (coches del Garage)')
         if aviso and avisos is not None: avisos.append(aviso)
-        self.data = d or {'version': 0, 'cars': [], 'pista': {}, 'historial': [], 'hechos': []}
+        self.data = d or {'version': 0, 'cars': [], 'uso': {}, 'historial': [], 'hechos': []}
     @staticmethod
     def check(d):
         if not isinstance(d, dict) or not isinstance(d.get('cars'), list) or type(d.get('version')) != int: raise ValueError('garage.json inválido')
-        d.setdefault('pista', {}); d.setdefault('historial', []); d.setdefault('hechos', [])
+        d.pop('pista', None)   # versión vieja (coche amarrado al mando): ya no se usa
+        d.setdefault('uso', {}); d.setdefault('historial', []); d.setdefault('hechos', [])
+        for c in d['cars']: c.setdefault('tipo', 'casa')
         return d
     def read(self):
         with self.lock: return copy.deepcopy(self.data)
@@ -137,11 +143,23 @@ class Garage:
     def _find(self, cid):
         return next((c for c in self.data['cars'] if c['id'] == cid), None)
     def _limpiar_pista(self):
-        ids = {c['id']: c for c in self.data['cars']}; p = {}
-        for k, cid in (self.data.get('pista') or {}).items():
-            c = ids.get(cid)
-            if c and (c['chip'] is None or str(c['chip']) == str(k)) and cid not in p.values(): p[str(k)] = cid
-        self.data['pista'] = p
+        ids = {c['id'] for c in self.data['cars']}; u = {}
+        for k, cid in (self.data.get('uso') or {}).items():
+            if cid in ids and cid not in u.values(): u[str(k)] = cid   # un coche lo lleva un solo piloto a la vez
+        self.data['uso'] = u
+    def _usar(self, slot, cid, nombres=None):
+        try: slot = int(slot)
+        except (TypeError, ValueError): raise GarageError('Piloto inválido.')
+        if not 0 <= slot <= 5: raise GarageError('Piloto inválido.')
+        u = self.data.setdefault('uso', {})
+        if not cid: u.pop(str(slot), None); return
+        c = self._find(cid)
+        if not c: raise GarageError('Ese coche ya no está en el Garage.', 404)
+        otro = next((k for k, v in u.items() if v == cid and k != str(slot)), None)
+        if otro is not None:
+            quien = (nombres or {}).get(otro) or 'otro piloto'
+            raise GarageError('%s ya está en uso con %s. Escoge otro coche.' % (c['nombre'], quien), 409)
+        u[str(slot)] = cid
     def _foto(self, car, image):
         if not isinstance(image, str) or not image.startswith('data:image/jpeg;base64,'): raise GarageError('Usa una foto (JPG).')
         try: raw = base64.b64decode(image.split(',', 1)[1], validate=True)
@@ -153,7 +171,7 @@ class Garage:
         car['foto'] = name
         if old and FOTO.match(old): (self.directory / old[1:]).unlink(missing_ok=True)
     def command(self, p):
-        """POST /api/garage: save | delete | pista | quitar_foto | ejemplos."""
+        """POST /api/garage: save | delete | usar | rapido | a_casa | borrar_invitados | quitar_foto | ejemplos."""
         if not isinstance(p, dict): raise GarageError('Datos inválidos.')
         a = p.get('action')
         with self.lock:
@@ -166,10 +184,7 @@ class Garage:
                 car = limpiar_coche(c, prev)
                 if p.get('image') is not None: self._foto(car, p['image'])
                 if prev: self.data['cars'][self.data['cars'].index(prev)] = car
-                else:
-                    self.data['cars'].append(car)
-                    # Coche nuevo con chip y ese mando libre: queda en pista solo (se quita en el Garage).
-                    if car['chip'] and str(car['chip']) not in self.data.setdefault('pista', {}): self.data['pista'][str(car['chip'])] = car['id']
+                else: self.data['cars'].append(car)   # no se asigna solo a nadie: el piloto lo escoge a propósito
                 self._limpiar_pista(); self._save()
                 return dict(self.view(), saved=car['id'])
             if a == 'delete':
@@ -183,30 +198,35 @@ class Garage:
                 if not c: raise GarageError('Ese coche ya no está en el Garage.', 404)
                 if c.get('foto') and FOTO.match(c['foto']): (self.directory / c['foto'][1:]).unlink(missing_ok=True)
                 c['foto'] = ''; self._save(); return self.view()
-            if a == 'pista':
-                # Poner un coche en pista con un mando (o quitarlo: id vacío). El mando debe ser el de su chip.
-                try: m = int(p.get('mando'))
-                except (TypeError, ValueError): raise GarageError('Mando del 1 al 6.')
-                if not 1 <= m <= 6: raise GarageError('Mando del 1 al 6.')
-                cid = p.get('id') or ''
-                pista = self.data.setdefault('pista', {})
-                if not cid: pista.pop(str(m), None)
-                else:
-                    c = self._find(cid)
-                    if not c: raise GarageError('Ese coche ya no está en el Garage.', 404)
-                    if c['chip'] is not None and c['chip'] != m: raise GarageError('%s tiene el chip %d: solo corre con el mando %d.' % (c['nombre'], c['chip'], c['chip']))
-                    for k in [k for k, v in pista.items() if v == cid]: pista.pop(k)
-                    pista[str(m)] = cid
-                self._save(); return self.view()
+            if a == 'usar':
+                # El piloto (lugar del registro 0-5) lleva este coche (id vacío = ninguno). Un coche, un piloto a la vez.
+                self._usar(p.get('slot'), p.get('id') or '', p.get('nombres')); self._save(); return self.view()
+            if a == 'rapido':
+                # Alta rápida desde la carrera: coche de invitado (nombre + clase + hándicap) y se lo lleva ese piloto.
+                if len(self.data['cars']) >= MAX_CARS: raise GarageError('El Garage ya tiene %d coches.' % MAX_CARS)
+                c = p.get('car') or {}
+                car = limpiar_coche({'nombre': c.get('nombre'), 'clase': c.get('clase', 'sin_iman'), 'h': c.get('h', 0),
+                                     'dueno': c.get('dueno'), 'tipo': 'invitado'})
+                self.data['cars'].append(car)
+                if p.get('slot') not in (None, ''): self._usar(p.get('slot'), car['id'], p.get('nombres'))
+                self._save(); return dict(self.view(), saved=car['id'])
+            if a == 'a_casa':
+                c = self._find(p.get('id'))
+                if not c: raise GarageError('Ese coche ya no está en el Garage.', 404)
+                c['tipo'] = 'casa'; self._save(); return self.view()
+            if a == 'borrar_invitados':
+                for c in [c for c in self.data['cars'] if c.get('tipo') == 'invitado']:
+                    self.data['cars'].remove(c)
+                    if c.get('foto') and FOTO.match(c['foto']): (self.directory / c['foto'][1:]).unlink(missing_ok=True)
+                self._limpiar_pista(); self._save(); return self.view()
             if a == 'ejemplos':
                 hay = {c['nombre'] for c in self.data['cars']}; n = 0
                 for (nom, esc, col, cl, h, chip, techo, motor, peso, dueno, nota) in EJEMPLOS:
                     if nom in hay or len(self.data['cars']) >= MAX_CARS: continue
                     car = limpiar_coche({'nombre': nom, 'escuderia': esc, 'color': col, 'clase': cl, 'h': h, 'chip': chip, 'techo': techo,
-                                         'motor': motor, 'peso': peso, 'dueno': dueno, 'ejemplo': True,
+                                         'motor': motor, 'peso': peso, 'dueno': dueno, 'ejemplo': True, 'tipo': 'invitado' if 'invitad' in nom else 'casa',
                                          'notas': [{'fecha': time.strftime('%Y-%m-%d'), 'texto': nota}] if nota else []})
                     self.data['cars'].append(car); n += 1
-                    if str(chip) not in self.data['pista']: self.data['pista'][str(chip)] = car['id']
                 self._limpiar_pista(); self._save(); return dict(self.view(), agregados=n)
         raise GarageError('Acción desconocida.')
     # ---------- historial ----------
@@ -237,7 +257,7 @@ class Garage:
         return out
     def view(self):
         with self.lock:
-            d = {'version': self.data['version'], 'cars': copy.deepcopy(self.data['cars']), 'pista': dict(self.data.get('pista') or {})}
+            d = {'version': self.data['version'], 'cars': copy.deepcopy(self.data['cars']), 'uso': dict(self.data.get('uso') or {})}
         st = self.stats()
         for c in d['cars']: c['hist'] = st.get(c['id'], {'mejor': None, 'vueltas': 0, 'carreras': 0, 'ganadas': 0, 'practicas': 0, 'ultima': None})
         return d

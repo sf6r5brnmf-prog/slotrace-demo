@@ -98,7 +98,9 @@
     if(realNode){const t=use?'real '+Number(raw).toFixed(2)+' s':'';realNode.hidden=!t;if(realNode.textContent!==t)realNode.textContent=t;}
   }
   // ---------- 🏎️ Garage: coches físicos con su ficha y su propio hándicap (data/garage.json en la Mac) ----------
-  // pista = {mando: id}: qué coche del Garage corre con cada mando (1-6). Lo usan Práctica, Carrera, Gran Premio y Torneo.
+  // Dos garages: «🏠 Garage de la casa» y «🧳 Garage de invitados» (coches que traen los pilotos invitados).
+  // El MANDO no se queda con el coche: el piloto escoge (o le toca por sorteo) un mando y lo vincula a SU coche.
+  // uso = {lugar del registro 0-5: id del coche que lleva ese piloto}. Un coche, un piloto a la vez.
   const GAR={data:null,listeners:[],timer:null};
   function garEmit(){GAR.listeners.forEach(f=>{try{f(GAR.data);}catch(e){console.error(e);}});}
   async function garLoad(){
@@ -108,29 +110,72 @@
   }
   function garStart(ms){if(GAR.timer)return;garLoad();GAR.timer=setInterval(garLoad,ms||5000);}
   function garCars(){return (GAR.data&&GAR.data.cars)||[];}
-  function garOn(m){const d=GAR.data;if(!d)return null;const id=(d.pista||{})[String(m)];return id?garCars().find(c=>c.id===id)||null:null;}
+  function garCar(id){return id?garCars().find(c=>c.id===id)||null:null;}
+  function garUso(slot){const d=GAR.data;return d?garCar((d.uso||{})[String(slot)]):null;}
+  function garUsadoPor(id){const d=GAR.data;if(!d)return null;const e=Object.entries(d.uso||{}).find(([k,v])=>v===id);return e?Number(e[0]):null;}
   async function garPost(body){
     const r=await fetch('/api/garage',{method:'POST',headers:{'Content-Type':'application/json','X-Roster':'1'},body:JSON.stringify(body)});
     let d={};try{d=await r.json();}catch(e){}
     if(!r.ok)throw Error(d.error||'No se pudo guardar en el Garage.');
     GAR.data=d;garEmit();return d;
   }
-  function garCarTxt(c){return c.nombre+(c.chip?' · chip '+c.chip:'')+' · '+ICON[c.clase]+(c.h?' '+segTxt(c.h):'');}
-  // <select> «🏎️ Coche del Garage» para el mando actual. onPick(mando, coche|null) después de guardarlo en la Mac.
-  // Un coche con chip solo corre con SU mando: al elegirlo, el piloto se cambia a ese mando.
-  function garSelect(mando,onPick,onError){
-    const s=document.createElement('select');s.className='gar-sel';s.setAttribute('aria-label','Coche del Garage (mando '+mando+')');
-    const o0=document.createElement('option');o0.value='';o0.textContent=garCars().length?'🏎️ Sin coche del Garage':'🏎️ Garage vacío';s.append(o0);
-    garCars().forEach(c=>{const o=document.createElement('option');o.value=c.id;o.textContent='🏎️ '+garCarTxt(c);s.append(o);});
-    const cur=garOn(mando);s.value=cur?cur.id:'';
+  function garCarTxt(c){return c.nombre+' · '+ICON[c.clase]+(c.h?' '+segTxt(c.h):'');}
+  // Alta rápida de un coche de invitado: nombre + clase + hándicap (lo demás se completa luego en el Garage).
+  function garQuick(dueno){
+    return new Promise(res=>{
+      const mk=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e;};
+      const bg=mk('div','gq-bg');bg.setAttribute('role','dialog');bg.setAttribute('aria-modal','true');bg.setAttribute('aria-label','Coche de invitado nuevo');
+      const f=mk('form','gq');f.noValidate=true;
+      f.append(mk('h3','','🧳 Coche de invitado'),mk('p','help','Va al Garage de invitados'+(dueno?' a nombre de '+dueno:'')+'. Lo demás (foto, motor, peso…) se llena después en el Garage.'));
+      const ln=mk('label','gq-f');ln.append(mk('span','','Nombre o modelo'));const nm=mk('input');nm.maxLength=40;nm.required=true;nm.placeholder='p. ej. Ford GT azul';nm.autocomplete='off';nm.id='gqNombre';ln.append(nm);
+      const lc=mk('label','gq-f');lc.append(mk('span','','Clase'));const cl=mk('select');cl.id='gqClase';CLASES.forEach(([k,n])=>{const o=mk('option','',ICON[k]+' '+n);o.value=k;cl.append(o);});lc.append(cl);
+      const lh=mk('div','gq-f');lh.append(mk('span','','Hándicap propio del coche (s por vuelta)'));const hi=mk('input');hi.id='gqH';lh.append(hi);
+      const er=mk('p','gq-err');er.setAttribute('role','alert');
+      const bt=mk('div','gq-btns');const no=mk('button','gq-no','Cancelar');no.type='button';const ok=mk('button','gq-ok','Agregar y usar');ok.type='submit';bt.append(no,ok);
+      f.append(ln,lc,lh,er,bt);bg.append(f);document.body.append(bg);
+      const fld=upgrade(hi,()=>{});fld.setValue(0);
+      const done=v=>{bg.remove();document.removeEventListener('keydown',esc);res(v);};
+      const esc=e=>{if(e.key==='Escape')done(null);};document.addEventListener('keydown',esc);
+      no.addEventListener('click',()=>done(null));bg.addEventListener('click',e=>{if(e.target===bg)done(null);});
+      f.addEventListener('submit',e=>{e.preventDefault();const n=nm.value.trim();const h=fld.getValue();
+        if(!n){er.textContent='Escribe el nombre o modelo del coche.';nm.focus();return;}
+        if(!Number.isFinite(h)){er.textContent='El hándicap va de 0 a 10 segundos (el botón + / − elige si suma o resta).';return;}
+        done({nombre:n,clase:cl.value,h,dueno:dueno||''});});
+      setTimeout(()=>nm.focus(),30);
+    });
+  }
+  // <select> de coche con los dos grupos (casa e invitados) + «➕ Coche de invitado nuevo…».
+  // o = {cur, usados:{id:'nombre del piloto que ya lo lleva'}, aria, dueno, onPick(id)→Promise, onNuevo(datos)→Promise, onError(msg)}
+  function garPicker(o){
+    const s=document.createElement('select');s.className='gar-sel';s.setAttribute('aria-label',o.aria||'Coche del Garage');
+    const add=(parent,v,t,dis)=>{const op=document.createElement('option');op.value=v;op.textContent=t;op.disabled=!!dis;parent.append(op);return op;};
+    add(s,'',garCars().length?'🏎️ Sin coche del Garage (como antes)':'🏎️ Sin coche del Garage');
+    [['casa','🏠 Garage de la casa'],['invitado','🧳 Garage de invitados']].forEach(([t,lbl])=>{
+      const cs=garCars().filter(c=>(c.tipo||'casa')===t);if(!cs.length)return;
+      const g=document.createElement('optgroup');g.label=lbl;
+      cs.forEach(c=>{const u=(o.usados||{})[c.id];add(g,c.id,'🏎️ '+garCarTxt(c)+(t==='invitado'&&c.dueno?' · de '+c.dueno:'')+(u?' · en uso con '+u:''),!!u&&c.id!==o.cur);});
+      s.append(g);});
+    if(o.onNuevo)add(s,'__nuevo','➕ Coche de invitado nuevo…');
+    s.value=o.cur&&garCar(o.cur)?o.cur:'';const prev=s.value;
     s.addEventListener('click',e=>e.stopPropagation());
     s.addEventListener('change',async()=>{
-      const c=garCars().find(x=>x.id===s.value)||null,m=c&&c.chip?c.chip:mando;
-      try{await garPost({action:'pista',mando:c?m:mando,id:c?c.id:''});if(onPick)onPick(c?m:mando,c);}
-      catch(e){const k=garOn(mando);s.value=k?k.id:'';if(onError)onError(e.message);}
+      try{
+        s.blur();   // para que la pantalla se pueda redibujar con el cambio
+        if(s.value==='__nuevo'){s.value=prev;const datos=await garQuick(o.dueno);if(datos)await o.onNuevo(datos);return;}
+        await o.onPick(s.value||'');
+      }catch(e){s.value=prev;if(o.onError)o.onError(e.message||String(e));}
     });
     return s;
   }
-  window.PeluGarage={load:garLoad,start:garStart,cars:garCars,on:garOn,post:garPost,select:garSelect,txt:garCarTxt,onChange:f=>GAR.listeners.push(f),get data(){return GAR.data;}};
+  // Coche que lleva el piloto del registro (lugar 0-5) en Práctica, Carrera y Gran Premio. nombres = {lugar: nombre}.
+  function garPilot(slot,nombre,nombres,onDone,onError){
+    const d=GAR.data||{},usados={};Object.entries(d.uso||{}).forEach(([k,v])=>{if(Number(k)!==Number(slot))usados[v]=(nombres||{})[k]||'otro piloto';});
+    return garPicker({cur:(d.uso||{})[String(slot)]||'',usados,aria:'Coche de '+nombre,dueno:nombre,onError,
+      onPick:async id=>{await garPost({action:'usar',slot,id});if(onDone)onDone();},
+      onNuevo:async c=>{await garPost({action:'rapido',slot,car:c});if(onDone)onDone();}});
+  }
+  // Sorteo de mandos: n mandos distintos al azar entre los disponibles (1 a 6 por defecto).
+  function sortearMandos(n,disp){const a=(disp||[1,2,3,4,5,6]).slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a.slice(0,n);}
+  window.PeluGarage={load:garLoad,start:garStart,cars:garCars,car:garCar,uso:garUso,usadoPor:garUsadoPor,post:garPost,picker:garPicker,pilot:garPilot,quick:garQuick,sortear:sortearMandos,txt:garCarTxt,onChange:f=>GAR.listeners.push(f),get data(){return GAR.data;}};
   window.PeluHandicap={CLASES,ICON,NOMBRE,MIN_VUELTA_H,segTxt,adj,label,setTime,upgrade,NIVELES,NIVEL,NIVEL_ICON,AUTO,nivelTxt,detalle,cortesTxt,sugTxt,nivelSettings,nivelPicker};
 })();

@@ -1,12 +1,13 @@
 <!doctype html>
-<html lang="es-MX"><head><script src="demo-shim.js?v=202611241123"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Garage · Puto el último</title><link rel="stylesheet" href="style.css?v=202611241123"><link rel="stylesheet" href="gp.css?v=202611241123"><link rel="stylesheet" href="garage.css?v=202611241123"><script src="handicap.js?v=202611241123" defer></script><script src="garage.js?v=202611241123" defer></script></head>
+<html lang="es-MX"><head><script src="demo-shim.js?v=202611241243"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Garage · Puto el último</title><link rel="stylesheet" href="style.css?v=20261124inv"><link rel="stylesheet" href="gp.css?v=20261124inv"><link rel="stylesheet" href="garage.css?v=20261124inv"><script src="handicap.js?v=20261124inv" defer></script><script src="garage.js?v=20261124inv" defer></script></head>
 <body class="gp-page garage-page"><main>
-<header class="gp-header"><div><p class="eyebrow">SLOTRACE / GARAGE</p><h1>🏎️ Garage</h1><p class="subtitle">Los coches de la pista. Cada uno con su clase, su chip y su propio hándicap.</p></div>
+<header class="gp-header"><div><p class="eyebrow">SLOTRACE / GARAGE</p><h1>🏎️ Garage</h1><p class="subtitle">Los coches de la casa y los de los invitados. Cada uno con su clase y su propio hándicap.</p></div>
 <div class="gp-status"><a class="link-button" href="index.html">← Menú</a><a class="link-button" href="gp.html">🏁 Gran Premio</a><a class="link-button" href="micoche.html">📱 Mi coche</a><span id="connection" class="chip">Conectando…</span></div></header>
-<section class="gar-pista" aria-labelledby="pistaTitle"><h2 class="gp-h2" id="pistaTitle">En pista ahora</h2>
-<p class="muted">Qué coche del Garage corre con cada mando. Su clase y su hándicap propio cuentan solos en Práctica, Carrera, Gran Premio y Torneo. Mando sin coche del Garage = como antes (la clase del mando en el menú).</p>
+<section class="gar-pista" aria-labelledby="pistaTitle"><h2 class="gp-h2" id="pistaTitle">¿Quién lleva qué coche?</h2>
+<p class="muted">El mando no se queda con el coche: cada piloto escoge (o le toca por sorteo) un mando y lo vincula a SU coche. Aquí, o al armar la carrera, cada piloto escoge su coche. Su clase y su hándicap propio cuentan solos en Práctica, Carrera y Gran Premio. Sin coche del Garage = como antes.</p>
 <div id="pista" class="gar-pista-grid"></div></section>
-<div class="toolbar gar-toolbar"><div><strong id="count">0 coches</strong><span class="muted"> · Hándicap total por vuelta = clase + coche + nivel del piloto</span></div><button class="primary" id="add" type="button">+ Agregar coche</button></div>
+<nav class="gar-tabs" role="tablist" aria-label="Garages"><button type="button" role="tab" id="tabCasa" class="gar-tab on" aria-selected="true">🏠 Garage de la casa <b id="nCasa">0</b></button><button type="button" role="tab" id="tabInv" class="gar-tab" aria-selected="false">🧳 Garage de invitados <b id="nInv">0</b></button></nav>
+<div class="toolbar gar-toolbar"><div><strong id="count">0 coches</strong><span class="muted" id="countHelp"> · Hándicap total por vuelta = clase + coche + nivel del piloto</span></div><div class="gar-tools"><button type="button" id="delGuests" class="gar-danger" hidden>🗑 Borrar todos los invitados</button><button class="primary" id="add" type="button">+ Agregar coche</button></div></div>
 <p id="msg" class="error" role="alert"></p>
 <div id="cars" class="gar-grid" aria-live="polite"></div>
 </main>
@@ -20,8 +21,10 @@
     </div>
     <div class="gar-fields">
       <label>Nombre o modelo<input id="nombre" maxlength="40" required autocomplete="off" placeholder="p. ej. Ford GT rojo"></label>
+      <label>Garage<select id="tipo"><option value="casa">🏠 Garage de la casa</option><option value="invitado">🧳 Garage de invitados (coche de un piloto invitado)</option></select></label>
       <div class="gar-2"><label>Escudería<input id="escuderia" maxlength="40" autocomplete="off"></label><label>Color<input id="color" type="color" value="#e53935"></label></div>
-      <div class="gar-2"><label>Clase<select id="clase"></select></label><label>Chip / mando SCX<select id="chip"><option value="">Sin chip</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label></div>
+      <div class="gar-2"><label>Clase<select id="clase"></select></label><label>Chip / mando habitual (opcional)<select id="chip"><option value="">—</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label></div>
+      <p class="help">Solo informativo: en SCX Digital el chip se empareja con cualquier mando. El piloto escoge su mando (o le toca por sorteo) en cada carrera y lo vincula a este coche.</p>
       <label for="h">Hándicap propio del coche (segundos por vuelta)</label><input id="h">
       <p class="help" id="hHelp">Se suma a la clase y al nivel del piloto. Toca el botón: verde = suma, azul = resta.</p>
       <div class="gar-2"><label>Color de la marca del techo<input id="techo" type="color" value="#ffffff"></label><label class="gar-check"><input type="checkbox" id="sinTecho"> Sin marca todavía</label></div>

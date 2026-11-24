@@ -191,6 +191,9 @@ class Handler(BaseHTTPRequestHandler):
                 try:return self.reply(200,self.server.inscritos.write(payload))
                 except torneo_mod.TorneoError as e:return self.reply(e.status,{'error':str(e)})
             if route=='/api/garage':
+                if isinstance(payload,dict) and payload.get('action') in ('usar','rapido'):
+                    with LOCK:sl=self.server.store.read()['slots']
+                    payload['nombres']={str(i):(x or {}).get('name') or 'Piloto %d'%(i+1) for i,x in enumerate(sl)}
                 try:return self.reply(200,self.server.garage.command(payload))
                 except garage_mod.GarageError as e:return self.reply(e.status,{'error':str(e)})
             if route=='/api/vueltas-config':
@@ -283,20 +286,20 @@ def _sesiones_terminadas(server):
             h=live.session_handicap(s);rows=[]
             for p in s['pilots']:
                 laps=[l['s'] for l in p.get('laps') or [] if isinstance(l.get('s'),(int,float))]
-                rows.append((p['name'],handicap_mod.clase_de(h,live.car_of_slot(p['slot'])),min(laps) if laps else None,len(laps)))
+                rows.append((p['name'],handicap_mod.clase_de(h,live.hkey(h,p['slot'])),min(laps) if laps else None,len(laps)))
             out.append(('live:'+s['id'],('Carrera' if s.get('type')=='race' else 'Práctica')+time.strftime(' %d/%m %H:%M',time.localtime(s.get('created_at') or time.time())),rows))
     with gpo.lock:
         g=gpo.gp
         if g and g.get('status')!='cancelled':
-            h=gpo.handicap();tq=gpo.es_torneo()
+            tq=gpo.es_torneo()
             for run in g['runs']:
                 if run['phase']!='done' or run.get('skipped'):continue
-                rows=[]
+                rows=[];h=gpo.handicap_run(run)
                 for sl in run.get('participants') or []:
                     d=run['data'].get(str(sl))
                     if not isinstance(d,dict):continue
                     laps=[l['s'] for l in d.get('laps') or [] if l.get('valid')]
-                    p=gpo.pilot(sl);rows.append((p['name'],handicap_mod.clase_de(h,gpo.car_of(run,sl)),min(laps) if laps else None,len(laps)))
+                    p=gpo.pilot(sl);rows.append((p['name'],handicap_mod.clase_de(h,gpo.hk(h,run,sl)),min(laps) if laps else None,len(laps)))
                 out.append(('gp:%s:%s'%(g['id'],run['key']),('Torneo · ' if tq else 'Gran Premio · ')+run['label'],rows))
     return out
 GARAGE_LOCK=threading.Lock()
@@ -312,7 +315,7 @@ def revisar_garage(server):
         if s and s.get('phase')=='ended' and s.get('id') and not gar.ya('live:'+s['id']):
             h=s.get('handicap');coches={};hs={};gid={}
             for p in s['pilots']:
-                car=p.get('car') or live.car_of_slot(p['slot']);g=handicap_mod.garage_de(h,car)
+                car=live.hkey(h,p['slot']);g=handicap_mod.garage_de(h,car)
                 hs[p['slot']]=handicap_mod.seg_de(h,car,p.get('nivel'))
                 if not g:continue
                 laps=[l['s'] for l in p.get('laps') or [] if isinstance(l.get('s'),(int,float))]
@@ -329,20 +332,21 @@ def revisar_garage(server):
         if g and g.get('status')=='done' and not gar.ya('gp:'+g['id']):
             snap=(gpo.snapshot() or {}).get('gp') or {}
             with gpo.lock:
-                h=gpo.handicap();coches={};tq=gpo.es_torneo()
+                coches={};tq=gpo.es_torneo()
                 for run in g['runs']:
                     if run['phase']!='done' or run.get('skipped'):continue
+                    h=gpo.handicap_run(run)
                     for sl in run.get('participants') or []:
                         d=run['data'].get(str(sl))
                         if not isinstance(d,dict):continue
-                        gg=handicap_mod.garage_de(h,gpo.car_of(run,sl))
+                        gg=handicap_mod.garage_de(h,gpo.hk(h,run,sl))
                         if not gg:continue
                         laps=[l['s'] for l in d.get('laps') or [] if l.get('valid')]
                         x=coches.setdefault(gg['id'],{'best':None,'vueltas':0,'gano':False,'piloto':gpo.pilot(sl)['name']})
                         if laps:x['best']=min(laps) if x['best'] is None else min(x['best'],min(laps));x['vueltas']+=len(laps)
                 for r in snap.get('final') or []:
                     if r.get('pos')==1:
-                        gg=handicap_mod.garage_de(h,r.get('car'))
+                        gg={'id':r.get('garage_id')} if r.get('garage_id') else None
                         if gg and gg['id'] in coches:coches[gg['id']]['gano']=True
             gar.registrar('gp:'+g['id'],{'tipo':'torneo' if tq else 'gp','at':g.get('created_at'),'fuente':('Torneo' if tq else 'Gran Premio')+time.strftime(' %d/%m %H:%M',time.localtime(g.get('created_at') or time.time())),'coches':coches})
     except Exception as e:
@@ -406,9 +410,11 @@ def wire(server):
     gp.min_lap=server.lap_config.min_lap
     gp.set_min_lap=lambda v:server.lap_config.write({'min_lap_s':v})
     # Handicap (ajuste de tiempo por vuelta por clase de coche): también en data/vueltas.json, uno para todo.
-    # + Garage: la clase del mando la pone el coche del Garage que está en pista, más su hándicap propio.
-    hc_efectivo=lambda:garage_mod.efectivo(server.lap_config.handicap(),server.garage.read())
-    gp.handicap_actual=hc_efectivo;live.current_handicap=hc_efectivo
+    # + Garage: el coche va con el PILOTO (no con el mando): su clase y su hándicap propio (data/garage.json «uso»).
+    def hc_live():
+        g=server.garage.read();return handicap_mod.con_pilotos(server.lap_config.handicap(),garage_mod.entradas(g,g.get('uso')))
+    live.current_handicap=hc_live;gp.handicap_actual=server.lap_config.handicap
+    gp.garage_read=server.garage.read
     # Bandera amarilla del piloto: triple clic del botón de cambio de carril (la tarjeta SCX solo se escucha).
     # Una sola configuración (Gran Premio → Configuración) para GP, Práctica y Carrera.
     flag_cfg=lambda:gp_flag_config(gp.gp['config'] if gp.gp and gp.gp.get('status')=='active' else gp.config)

@@ -70,3 +70,11 @@ body.modal-open{overflow:hidden}
   .gar-nota-add{grid-template-columns:1fr 1fr}.gar-nota-add input[type=date]{width:100%}.gar-nota-add input:not([type=date]){grid-column:1/-1;order:-1}
   .gar-actions .gar-sp{display:none}.gar-actions button{flex:1 1 40%}
 }
+.gar-btns .gar-poner{flex:1 1 60%;min-height:46px}
+/* Garage de la casa / de invitados */
+.gar-tabs{display:flex;gap:8px;margin:22px 0 0;flex-wrap:wrap}.gar-tab{flex:1 1 200px;text-align:left;border-radius:10px;padding:12px 14px}
+.gar-tab b{float:right;background:#0b0d11;border-radius:20px;padding:1px 9px;font-size:13px}.gar-tab.on{border-color:var(--lime);background:#1f2610;color:var(--lime)}
+.gar-tools{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.gar-badge.inv{background:#ffb02e;color:#1a1200;border-color:#ffb02e}
+.gar-danger{border-color:#7a2f2f;color:#ff8179}
+@media (max-width:600px){.gar-toolbar{flex-direction:column;align-items:stretch}.gar-tools>*{flex:1 1 auto}}

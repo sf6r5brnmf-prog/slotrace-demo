@@ -13,14 +13,19 @@ function segClase(k){return hcfg&&hcfg.enabled?Number((hcfg.seg||{})[k]||0):0;}
 function msg(t){$('msg').textContent=t||'';}
 async function loadCfg(){try{const r=await fetch('/api/vueltas-config',{cache:'no-store'});if(r.ok){const d=await r.json();const s=JSON.stringify(d.handicap);if(s!==JSON.stringify(hcfg)){hcfg=d.handicap;render();}}}catch(e){}}
 function conn(ok){const c=$('connection');c.textContent=ok?'● En vivo':'Sin conexión con la Mac';c.classList.toggle('live',ok);}
-// ---------- En pista ----------
+// ---------- ¿Quién lleva qué? (pilotos del registro) ----------
+let roster=null,tab='casa';
+async function loadRoster(){try{const r=await fetch('/api/roster',{cache:'no-store'});if(r.ok){const d=await r.json();const ch=!roster||d.version!==roster.version;roster=d;if(ch)render();}}catch(e){}}
+function nombres(){const n={};((roster||{}).slots||[]).forEach((p,i)=>{if(p)n[String(i)]=p.name;});return n;}
 function renderPista(){
   const box=$('pista');if(box.contains(document.activeElement))return;box.replaceChildren();
-  for(let m=1;m<=6;m++){const r=el('div','gar-mando');r.style.setProperty('--team',COLORS[m-1]);
-    const c=G.on(m);r.append(el('b','gar-mando-n',String(m)));
-    const t=el('div','gar-mando-t');t.append(el('small','','Mando '+m));
-    t.append(el('span','gar-mando-sub',c?H.ICON[c.clase]+' '+H.NOMBRE[c.clase]+' '+H.segTxt(segClase(c.clase))+' · coche '+H.segTxt(c.h)+' = '+H.segTxt(Math.round((segClase(c.clase)+c.h)*100)/100):'Como antes: clase del mando en el menú'));
-    const s=G.select(m,null,msg);t.append(s);r.append(t);box.append(r);}
+  const sl=(roster||{}).slots||[];
+  if(!sl.some(Boolean)){box.append(el('p','muted','No hay pilotos registrados. Regístralos en el menú → Pilotos.'));return;}
+  sl.forEach((p,i)=>{if(!p)return;const r=el('div','gar-mando');r.style.setProperty('--team',COLORS[i]);
+    const c=G.uso(i);r.append(el('b','gar-mando-n',(p.name||'?').slice(0,1).toUpperCase()));
+    const t=el('div','gar-mando-t');t.append(el('small','',p.name));
+    t.append(el('span','gar-mando-sub',c?H.ICON[c.clase]+' '+H.NOMBRE[c.clase]+' '+H.segTxt(segClase(c.clase))+' · coche '+H.segTxt(c.h)+' = '+H.segTxt(Math.round((segClase(c.clase)+c.h)*100)/100)+((c.tipo==='invitado')?' · 🧳 invitado':''):'Sin coche del Garage: como antes'));
+    t.append(G.pilot(i,p.name,nombres(),null,msg));r.append(t);box.append(r);});
 }
 // ---------- Tarjetas ----------
 function stat(n,v){const d=el('div');d.append(el('dt','',n),el('dd','',v));return d;}
@@ -29,9 +34,9 @@ function card(c){
   const img=el('div','gar-img');
   if(c.foto){const i=el('img');i.src=c.foto;i.alt='Foto de '+c.nombre;img.append(i);}else{const n=el('span','gar-noimg','🏎️');img.append(n);}
   const badges=el('div','gar-badges');
-  if(c.chip)badges.append(el('span','gar-badge chip','Chip '+c.chip));
-  const enp=Object.entries((G.data||{}).pista||{}).find(([k,v])=>v===c.id);
-  if(enp)badges.append(el('span','gar-badge pista','EN PISTA · mando '+enp[0]));
+  if(c.chip)badges.append(el('span','gar-badge chip','Mando habitual '+c.chip));
+  const inv=c.tipo==='invitado';if(inv)badges.append(el('span','gar-badge inv','🧳 INVITADO'+(c.dueno?' · '+c.dueno:'')));
+  const us=G.usadoPor(c.id);if(us!=null)badges.append(el('span','gar-badge pista','LO LLEVA · '+(nombres()[String(us)]||'piloto '+(us+1))));
   if(c.ejemplo)badges.append(el('span','gar-badge ej','EJEMPLO'));
   img.append(badges);
   const b=el('div','gar-body');
@@ -50,15 +55,27 @@ function card(c){
   if(exl.childNodes.length)b.append(exl);
   if(c.notas&&c.notas.length){const n=c.notas[0];b.append(el('p','gar-nota','🔧 '+(n.fecha?fmtFecha(n.fecha)+' · ':'')+n.texto+(c.notas.length>1?' (+'+(c.notas.length-1)+')':'')));}
   const bt=el('div','gar-btns');const ed=el('button','','Editar');ed.type='button';ed.addEventListener('click',()=>openEditor(c));bt.append(ed);
-  if(c.chip){const p=el('button',enp?'':'primary',enp?'Quitar de pista':'Poner en pista (mando '+c.chip+')');p.type='button';
-    p.addEventListener('click',async()=>{try{await G.post({action:'pista',mando:c.chip,id:enp?'':c.id});msg('');}catch(e){msg(e.message);}});bt.append(p);}
+  // Coche de invitado: al terminar el evento se pasa a la casa o se borra.
+  if(inv){const m=el('button','','🏠 Pasar a la casa');m.type='button';m.addEventListener('click',async()=>{try{await G.post({action:'a_casa',id:c.id});msg('«'+c.nombre+'» ya está en el Garage de la casa.');}catch(e){msg(e.message);}});
+    const d=el('button','gar-danger','🗑 Borrar');d.type='button';d.addEventListener('click',async()=>{if(!confirm('¿Borrar «'+c.nombre+'» del Garage de invitados? Las carreras ya guardadas no cambian.'))return;try{await G.post({action:'delete',id:c.id});msg('');}catch(e){msg(e.message);}});
+    bt.append(m,d);}
   b.append(bt);a.append(img,b);return a;
 }
 function render(){
-  const cars=G.cars();$('count').textContent=cars.length+(cars.length===1?' coche':' coches');
+  const all=G.cars(),casa=all.filter(c=>(c.tipo||'casa')==='casa'),invs=all.filter(c=>c.tipo==='invitado');
+  $('nCasa').textContent=casa.length;$('nInv').textContent=invs.length;
+  $('tabCasa').classList.toggle('on',tab==='casa');$('tabInv').classList.toggle('on',tab==='invitado');
+  $('tabCasa').setAttribute('aria-selected',String(tab==='casa'));$('tabInv').setAttribute('aria-selected',String(tab==='invitado'));
+  const cars=tab==='casa'?casa:invs;
+  $('count').textContent=cars.length+(cars.length===1?' coche':' coches')+(tab==='casa'?' de la casa':' de invitados');
+  $('countHelp').textContent=tab==='casa'?' · Hándicap total por vuelta = clase + coche + nivel del piloto':' · Coches que traen los pilotos invitados. Después del evento: pásalos a la casa o bórralos.';
+  $('add').textContent=tab==='casa'?'+ Agregar coche':'+ Coche de invitado';$('delGuests').hidden=tab!=='invitado'||!invs.length;
   renderPista();
   const box=$('cars');box.replaceChildren();
-  if(!cars.length){const e=el('div','gar-empty');e.append(el('strong','','El Garage está vacío'),el('p','muted','Agrega tus coches con «+ Agregar coche». En la DEMO también puedes cargar el garage de ejemplo desde el botón DEMO.'));box.append(e);return;}
+  if(!cars.length){const e=el('div','gar-empty');
+    if(tab==='casa')e.append(el('strong','','El Garage de la casa está vacío'),el('p','muted','Agrega tus coches con «+ Agregar coche». En la DEMO también puedes cargar el garage de ejemplo desde el botón DEMO.'));
+    else e.append(el('strong','','No hay coches de invitados'),el('p','muted','Cuando un piloto invitado trae su coche, agrégalo aquí o directo al armar la carrera con «➕ Coche de invitado nuevo…» (nombre, clase y hándicap).'));
+    box.append(e);return;}
   cars.forEach(c=>box.append(card(c)));
 }
 // ---------- Editor ----------
@@ -75,11 +92,11 @@ function openEditor(c){
   editing=c||null;photoData=null;photoRemove=false;$('edError').textContent='';
   $('edTitle').textContent=c?'Editar coche':'Agregar coche';$('delete').hidden=!c;
   $('nombre').value=c?c.nombre:'';$('escuderia').value=c?c.escuderia:'';$('color').value=c&&c.color?c.color:'#e53935';
-  $('clase').value=c?c.clase:'sin_iman';$('chip').value=c&&c.chip?String(c.chip):'';
+  $('clase').value=c?c.clase:'sin_iman';$('tipo').value=c?(c.tipo||'casa'):tab;$('chip').value=c&&c.chip?String(c.chip):'';
   hField.setValue(c?c.h:0);
   $('techo').value=c&&c.techo?c.techo:'#ffffff';$('sinTecho').checked=!!c&&!c.techo;$('techo').disabled=$('sinTecho').checked;
   $('motor').value=c?c.motor:'';$('peso').value=c&&c.peso!=null?c.peso:'';$('dueno').value=c?c.dueno:'';
-  $('mas').open=!!(c&&(c.motor||c.peso||c.dueno));
+  $('mas').open=!!(c&&(c.motor||c.peso||c.dueno))||$('tipo').value==='invitado';
   notas=c?c.notas.map(n=>Object.assign({},n)):[];renderNotas();$('notaFecha').value=hoy();$('notaTexto').value='';
   setPhoto(c&&c.foto?c.foto:'');updHelp();
   $('editor').hidden=false;document.body.classList.add('modal-open');setTimeout(()=>{if(!c)$('nombre').focus();},50);
@@ -98,7 +115,7 @@ async function save(e){
   const pend=$('notaTexto').value.trim();if(pend)notas.unshift({fecha:$('notaFecha').value||'',texto:pend});
   const car={id:editing?editing.id:undefined,nombre:$('nombre').value,escuderia:$('escuderia').value,color:$('color').value,clase:$('clase').value,h,
     chip:$('chip').value?Number($('chip').value):null,techo:$('sinTecho').checked?'':$('techo').value,motor:$('motor').value,peso:$('peso').value===''?null:$('peso').value,
-    dueno:$('dueno').value,notas,ejemplo:editing?editing.ejemplo:false};
+    dueno:$('dueno').value,tipo:$('tipo').value,notas,ejemplo:editing?editing.ejemplo:false};
   $('save').disabled=true;
   try{if(photoRemove&&editing&&editing.foto&&!photoData)await G.post({action:'quitar_foto',id:editing.id});
     const body={action:'save',car};if(photoData)body.image=photoData;await G.post(body);closeEditor();msg('');}
@@ -109,6 +126,11 @@ function wire(){
   hField=H.upgrade($('h'),()=>updHelp());
   $('clase').addEventListener('change',updHelp);
   $('add').addEventListener('click',()=>openEditor(null));
+  $('tabCasa').addEventListener('click',()=>{tab='casa';render();});$('tabInv').addEventListener('click',()=>{tab='invitado';render();});
+  $('tipo').addEventListener('change',()=>{if($('tipo').value==='invitado')$('mas').open=true;});
+  $('delGuests').addEventListener('click',async()=>{const n=G.cars().filter(c=>c.tipo==='invitado').length;
+    if(!confirm('¿Borrar los '+n+' coches del Garage de invitados? Pasa a la casa antes los que se quedan. Las carreras ya guardadas no cambian.'))return;
+    try{await G.post({action:'borrar_invitados'});msg('');}catch(e){msg(e.message);}});
   $('close').addEventListener('click',closeEditor);$('cancel').addEventListener('click',closeEditor);
   $('editor').addEventListener('click',e=>{if(e.target===$('editor'))closeEditor();});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('editor').hidden)closeEditor();});
@@ -122,9 +144,10 @@ function wire(){
     if(!confirm('¿Borrar «'+editing.nombre+'» del Garage? Se borran su ficha, su foto y sus notas. Las carreras ya guardadas no cambian.'))return;
     try{await G.post({action:'delete',id:editing.id});closeEditor();}catch(e){$('edError').textContent=e.message;}});
   G.onChange(()=>{conn(true);render();});
-  G.start(4000);loadCfg();setInterval(loadCfg,10000);
+  G.start(4000);loadCfg();setInterval(loadCfg,10000);loadRoster();setInterval(loadRoster,8000);
+  if(/[?&]tab=invitados/.test(location.search))tab='invitado';
   setInterval(async()=>{const d=await G.load();conn(!!d);},15000);
 }
 document.addEventListener('DOMContentLoaded',wire);
-window.PeluGaragePage={openEditor,render};
+window.PeluGaragePage={openEditor,render,setTab:t=>{tab=t;render();}};
 })();

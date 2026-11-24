@@ -127,12 +127,12 @@ function renderSetup(force){
     roster.slots.forEach((p,i)=>{if(!p)return;const card=el('label','pick'+(picked.has(i)?' on':''));card.style.setProperty('--team',COLORS[i]);
       const cb=el('input');cb.type='checkbox';cb.checked=picked.has(i);cb.addEventListener('change',()=>{cb.checked?picked.add(i):picked.delete(i);card.classList.toggle('on',cb.checked);});
       const img=el('img');img.src=p.avatar;img.alt='';const name=el('span','pick-name');name.append(el('strong','',p.name),el('small','','Equipo '+TEAM[i]));
-      const sel=el('select');for(let k=1;k<=6;k++){const o=el('option','','Coche '+k);o.value=k;sel.append(o);}sel.value=carPick[i];sel.addEventListener('click',e=>e.preventDefault&&e.stopPropagation());
+      const sel=el('select','pick-mando');sel.setAttribute('aria-label','Mando de '+p.name);for(let k=1;k<=6;k++){const o=el('option','','🎮 Mando '+k);o.value=k;sel.append(o);}sel.value=carPick[i];sel.addEventListener('click',e=>e.preventDefault&&e.stopPropagation());
       // Handicap: clase del coche elegido (se guarda al momento en la Mac).
       const hsel=el('select','hc-class');hsel.setAttribute('aria-label','Clase del coche de '+p.name);const hh=hcCfg();
       PeluHandicap.CLASES.forEach(([k,n])=>{const o=el('option','',PeluHandicap.ICON[k]+' '+n+(hh.enabled?' · '+PeluHandicap.segTxt(hh.seg[k]):''));o.value=k;hsel.append(o);});
-      // 🏎️ Garage: si el mando tiene un coche del Garage en pista, la clase la pone el coche.
-      const syncH=()=>{const gc=PeluGarage.on(carPick[i]);hsel.value=gc?gc.clase:(hcCfg().clases?.[String(carPick[i])]||'sin_iman');hsel.disabled=!!gc;hsel.title=gc?'La clase la pone el coche del Garage: '+gc.nombre:'';};syncH();
+      // 🏎️ Garage: si el piloto lleva un coche del Garage, la clase la pone SU coche (en el mando que le toque).
+      const syncH=()=>{const gc=PeluGarage.uso(i);hsel.value=gc?gc.clase:(hcCfg().clases?.[String(carPick[i])]||'sin_iman');hsel.disabled=!!gc;hsel.title=gc?'La clase la pone el coche del Garage: '+gc.nombre:'';};syncH();
       sel.addEventListener('change',()=>{carPick[i]=Number(sel.value);renderSetup(true);});
       hsel.addEventListener('click',e=>e.preventDefault&&e.stopPropagation());
       hsel.addEventListener('change',async()=>{const c={};c[String(carPick[i])]=hsel.value;try{await saveHandicap({clases:c});toast('Coche '+carPick[i]+': '+PeluHandicap.NOMBRE[hsel.value]);}catch(e){toast(e.message);syncH();}});
@@ -142,11 +142,17 @@ function renderSetup(force){
       nsel.addEventListener('click',e=>e.preventDefault&&e.stopPropagation());
       nsel.addEventListener('change',()=>setNivel(i,nsel.value));
       const sels=el('span','pick-sel');sels.append(sel,hsel,nsel);
-      if(PeluGarage.cars().length){const gs=PeluGarage.select(carPick[i],m=>{carPick[i]=m;renderSetup(true);},m=>toast(m));gs.addEventListener('click',e=>e.preventDefault&&e.stopPropagation());sels.append(gs);}
+      const names={};roster.slots.forEach((x,k)=>{if(x)names[String(k)]=x.name;});
+      sels.append(PeluGarage.pilot(i,p.name,names,()=>renderSetup(true),m=>toast(m)));
       if(p.sugerido&&p.sugerido.nivel!==nv){const sg=el('small','pick-sug');sg.append(document.createTextNode('Sugerido: '+PeluHandicap.NIVEL_ICON[p.sugerido.nivel]+' '+PeluHandicap.nivelTxt(p.sugerido.nivel)+' ('+Number(p.sugerido.s).toFixed(2)+' s) '));
         const ok=el('button','chip-button','Aceptar');ok.type='button';ok.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();setNivel(i,p.sugerido.nivel);});sg.append(ok);name.append(sg);}
       card.append(cb,img,name,sels);box.append(card);});
-    if(!roster.slots.some(Boolean))box.append(el('p','muted','No hay pilotos. Regístralos en el menú → Pilotos.'));}
+    if(!roster.slots.some(Boolean))box.append(el('p','muted','No hay pilotos. Regístralos en el menú → Pilotos.'));
+    else{const bar=el('div','sortear-bar');const b=el('button','sortear-btn','🎲 Sortear mandos');b.type='button';b.id='gpSortear';
+      b.addEventListener('click',()=>{const ids=[...picked].filter(k=>roster.slots[k]);if(!ids.length){toast('Marca a los pilotos que corren y luego sortea.');return;}
+        const toca=PeluGarage.sortear(ids.length);ids.forEach((k,n)=>{carPick[k]=toca[n];});b.blur();renderSetup(true);
+        toast('🎲 Mandos: '+ids.map(k=>roster.slots[k].name+' → '+carPick[k]).join(' · '));});
+      bar.append(b,el('small','muted','A cada piloto marcado le toca un mando distinto. Su coche del Garage va con él.'));box.prepend(bar);}}
   const tr=$('throttleRow');if(!tr.children.length)for(let k=1;k<=6;k++){const s=el('span','thr');s.dataset.car=k;s.append(el('b','',k),el('i'));tr.append(s);}
   const th=state.scx.throttle||[];tr.querySelectorAll('.thr').forEach((s,i)=>{const v=th[i];s.classList.toggle('none',v==null);s.classList.toggle('hot',v>0);s.querySelector('i').style.width=(v?v/15*100:0)+'%';s.title=v==null?'Sin mando':'Gatillo '+v;});
 }

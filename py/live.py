@@ -202,7 +202,7 @@ class Live:
                 # Handicap (ajuste de tiempo por vuelta): clase y segundos de cada piloto según su coche.
                 h=self.session_handicap(s);cars=[]
                 for p in s['pilots']:
-                    car=self.car_of_slot(p['slot']);cars.append(car)
+                    car=self.hkey(h,p['slot']);cars.append(car)
                     p.update(handicap_mod.info(h,car,p.get('nivel')))   # clase del coche + nivel del piloto
                 s['handicap']={'on':handicap_mod.activo(h,cars,[p.get('nivel') for p in s['pilots']]),'enabled':bool(h and h.get('enabled')),'resumen':handicap_mod.resumen(h),
                                'seg':(h or handicap_mod.OFF)['seg'],'nivel_on':bool(h and h.get('nivel_on')),'seg_nivel':(h or handicap_mod.OFF).get('seg_nivel') or {},'fijo':s['phase']!='ready'}
@@ -387,6 +387,9 @@ class Live:
         Una sesión guardada antes de esta versión no tiene handicap."""
         if s.get('phase')=='ready':return self.current_handicap()
         return s.get('handicap')
+    def hkey(self,h,slot):
+        """Llave del ajuste: el coche del Garage que lleva el piloto ('p<slot>'), si no, su mando."""
+        return handicap_mod.clave(h,slot,self.car_of_slot(slot))
     def car_of_slot(self,slot):
         config=getattr(self,'lap_config',None)
         try:c=config.car_for_slot(slot) if config is not None else None
@@ -396,8 +399,8 @@ class Live:
         """Práctica/Carrera actual (o la última terminada): vueltas válidas y vueltas sospechosas (columna «Cuenta»)."""
         with self.lock:s=copy.deepcopy(self.session);minimum=self.min_lap_s()
         if not s:raise LiveError('Todavía no hay una sesión de Práctica o Carrera.',404)
-        hcfg=self.session_handicap(s);hs={p['slot']:handicap_mod.seg_de(hcfg,self.car_of_slot(p['slot']),p.get('nivel')) for p in s['pilots']}
-        hcols={p['slot']:handicap_mod.csv_cols(handicap_mod.info(hcfg,self.car_of_slot(p['slot']),p.get('nivel'))) for p in s['pilots']}
+        hcfg=self.session_handicap(s);hs={p['slot']:handicap_mod.seg_de(hcfg,self.hkey(hcfg,p['slot']),p.get('nivel')) for p in s['pilots']}
+        hcols={p['slot']:handicap_mod.csv_cols(handicap_mod.info(hcfg,self.hkey(hcfg,p['slot']),p.get('nivel'))) for p in s['pilots']}
         config=getattr(self,'lap_config',None)
         def car_of(slot):
             try:return config.car_for_slot(slot) if config is not None else ''

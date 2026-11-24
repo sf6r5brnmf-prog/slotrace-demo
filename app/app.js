@@ -201,14 +201,32 @@ function renderParticipants(){
     if(!p)return;const label=element('label','participant-option');label.style.setProperty('--team',roster.colors[i].hex);
     const input=element('input');input.type='checkbox';input.name='pilot';input.value=String(i);input.checked=selectedPilots.has(i);input.addEventListener('change',()=>{input.checked?selectedPilots.add(i):selectedPilots.delete(i);updateSelectionCount();$('selectionError').textContent='';});
     const img=element('img');img.src=avatarSrc(p.avatar);img.alt='Avatar de '+p.name;
-    const gc=PeluGarage.on(carFor(i));
-    const text=element('span','participant-name');text.append(element('strong','',p.name),element('small','','Equipo '+roster.colors[i].name+' · Coche '+carFor(i)+(gc?' · 🏎️ '+gc.nombre:'')));label.append(input,img,text);
-    // 🏎️ Coche del Garage para este piloto: su clase y su hándicap propio se suman solos.
-    if(PeluGarage.cars().length){const gs=PeluGarage.select(carFor(i),m=>{if(m!==carFor(i))setCar(i,m);renderParticipants();},m=>{$('selectionError').textContent=m;});gs.classList.add('participant-garage');label.append(gs);}
+    const gc=PeluGarage.uso(i);
+    const text=element('span','participant-name');text.append(element('strong','',p.name),element('small','','Equipo '+roster.colors[i].name+' · Mando '+carFor(i)+(gc?' · 🏎️ '+gc.nombre:'')));label.append(input,img,text);
+    // El piloto escoge su MANDO (o le toca por sorteo) y lo vincula a SU coche: del Garage de la casa, de invitados o uno nuevo.
+    const pick=element('span','participant-pick');pick.addEventListener('click',e=>e.stopPropagation());
+    const ms=element('select','participant-mando');ms.setAttribute('aria-label','Mando de '+p.name);
+    for(let c=1;c<=6;c++){const o=element('option','','🎮 Mando '+c);o.value=String(c);ms.append(o);}
+    ms.value=String(carFor(i));ms.addEventListener('change',()=>setCar(i,Number(ms.value)));
+    const gs=PeluGarage.pilot(i,p.name,rosterNames(),()=>renderParticipants(),m=>{$('selectionError').textContent=m;});gs.classList.add('participant-garage');
+    pick.append(ms,gs);label.append(pick);
     target.append(label);
   });
+  // 🎲 Sortear mandos: a cada piloto seleccionado le toca un mando distinto al azar (su coche va con él).
+  if(roster.slots.some(Boolean)){const bar=element('div','sortear-bar');const b=element('button','sortear-btn','🎲 Sortear mandos');b.type='button';b.id='sortearMandos';
+    b.addEventListener('click',()=>sortearMandos());bar.append(b,element('small','help','Entre los pilotos seleccionados. El coche de cada quien va con él, no con el mando.'));target.prepend(bar);}
   if(!roster.slots.some(Boolean))target.append(element('p','help','No hay pilotos registrados. Agrega uno desde Administrar pilotos.'));
   updateSelectionCount();
+}
+function rosterNames(){const n={};(roster?.slots||[]).forEach((p,i)=>{if(p)n[String(i)]=p.name;});return n;}
+function sortearMandos(){
+  if(!lapConfig)return;const ids=[...selectedPilots].filter(i=>roster.slots[i]);
+  if(!ids.length){$('selectionError').textContent='Selecciona a los pilotos que van a correr y luego sortea.';return;}
+  const toca=PeluGarage.sortear(ids.length),cars=lapConfig.cars.slice(),libres=[1,2,3,4,5,6].filter(m=>!toca.includes(m));
+  ids.forEach((i,k)=>{cars[i]=toca[k];});
+  for(let i=0;i<6;i++)if(!ids.includes(i))cars[i]=libres.shift();
+  $('selectionError').textContent='';
+  saveLapConfig({source:lapConfig.source,cars}).then(()=>{$('selectionError').textContent='🎲 Mandos: '+ids.map(i=>roster.slots[i].name+' → '+cars[i]).join(' · ');});
 }
 function startSession(){
   const ids=[...selectedPilots].filter(i=>roster.slots[i]);
@@ -570,10 +588,10 @@ function renderLapConfig(force=false){
     const hc=element('select','hc-class');hc.setAttribute('aria-label','Clase del coche de '+p.name);
     PeluHandicap.CLASES.forEach(([k,n])=>{const o=element('option','',PeluHandicap.ICON[k]+' '+n+' · '+PeluHandicap.segTxt(hcCfg().seg[k]));o.value=k;hc.append(o);});
     hc.value=hcCfg().clases[String(carFor(i))]||'sin_iman';hc.addEventListener('change',()=>setClase(carFor(i),hc.value));
-    // 🏎️ Garage: si ese mando tiene un coche del Garage en pista, la clase la pone el coche (y suma su hándicap propio).
-    const gc=PeluGarage.on(carFor(i));if(gc){hc.value=gc.clase;hc.disabled=true;hc.title='La clase la pone el coche del Garage: '+gc.nombre;}
+    // 🏎️ Garage: si el piloto lleva un coche del Garage, la clase la pone SU coche (y suma su hándicap propio), en el mando que sea.
+    const gc=PeluGarage.uso(i);if(gc){hc.value=gc.clase;hc.disabled=true;hc.title='La clase la pone el coche del Garage: '+gc.nombre;}
     const sels=element('span','car-selects');sels.append(sel,hc);
-    if(PeluGarage.cars().length)sels.append(PeluGarage.select(carFor(i),m=>{if(m!==carFor(i))setCar(i,m);else renderLapConfig(true);},m=>{$('lapConfigError').textContent=m;}));
+    sels.append(PeluGarage.pilot(i,p.name,rosterNames(),()=>renderLapConfig(true),m=>{$('lapConfigError').textContent=m;}));
     const nv=p.nivel||'intermedio';row.append(element('span','',p.name+' · '+PeluHandicap.NIVEL_ICON[nv]+' '+PeluHandicap.nivelTxt(nv)),sels);target.append(row);
   });
   renderHandicapConfig();

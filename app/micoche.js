@@ -110,7 +110,7 @@ function renderPilot(p,d){
   const gb=$('meGarage');if(gb){const gc=d&&d.garage_id?PeluGarage.cars().find(c=>c.id===d.garage_id):null,nm=d&&d.coche_nombre;
     gb.hidden=!nm;if(nm){setText($('meGarNombre'),nm);
       const f=$('meGarFoto'),sw=$('meGarSw');const src=gc&&gc.foto?gc.foto:'';if(f.getAttribute('src')!==src){if(src)f.src=src;else f.removeAttribute('src');}f.hidden=!src;sw.hidden=!!src;if(gc)sw.style.background=gc.color||'#444';
-      setText($('meGarInfo'),gc?[gc.escuderia,PeluHandicap.ICON[gc.clase]+' '+PeluHandicap.NOMBRE[gc.clase],'hándicap propio '+PeluHandicap.segTxt(gc.h),gc.chip?'chip '+gc.chip:''].filter(Boolean).join(' · '):'');}}
+      setText($('meGarInfo'),gc?[gc.escuderia,PeluHandicap.ICON[gc.clase]+' '+PeluHandicap.NOMBRE[gc.clase],'hándicap propio '+PeluHandicap.segTxt(gc.h),gc.chip?'mando habitual '+gc.chip:''].filter(Boolean).join(' · '):'');}}
   // Nivel sugerido por sus tiempos (se acepta en la pantalla grande: Menú → Pilotos).
   const sg=$('meSug');if(sg){const x=p.sugerido&&p.sugerido.nivel!==p.nivel?p.sugerido:null,c=!x&&p.nivel_cambio;
     const t=x?'Nivel sugerido: '+PeluHandicap.nivelTxt(x.nivel)+' (mejor vuelta '+Number(x.s).toFixed(2)+' s). Se acepta en la pantalla grande, Menú → Pilotos.':c?'Tu nivel cambió: '+PeluHandicap.nivelTxt(c.de)+' → '+PeluHandicap.nivelTxt(c.nivel)+' (mejor vuelta '+Number(c.s).toFixed(2)+' s).':'';

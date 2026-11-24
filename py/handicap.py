@@ -113,8 +113,32 @@ def clean(raw, base=None):
             'nivel_auto': out['nivel_auto'], 'cortes': {k: {'experto': out['cortes'][k]['experto'], 'novato': out['cortes'][k]['novato']} for k, _ in CLASES}}
 
 
+def _k(car):
+    """Llave de un coche en h: el mando ('1'..'6') o el piloto con coche del Garage ('p<slot>', ver con_pilotos)."""
+    if isinstance(car, str) and car[:1] == 'p': return car
+    return str(int(car))
+
+
+def clave(h, slot, car):
+    """Llave para buscar el ajuste de un piloto: su coche del Garage si lo trae ('p<slot>'), si no el mando."""
+    k = 'p%s' % slot
+    return k if isinstance(((h or {}).get('garage') or {}).get(k), dict) else car
+
+
+def con_pilotos(h, entradas):
+    """h + el coche del Garage de cada piloto: entradas = {'p<slot>': ficha}. La clase y el hándicap propio
+    van con el PILOTO (su coche), no con el mando: el mando se sortea o se elige en cada carrera o manga."""
+    if h is None or not entradas: return h
+    out = copy.deepcopy(h)
+    for k, c in entradas.items():
+        out.setdefault('clases', {})[k] = c.get('clase') if c.get('clase') in NOMBRE else 'sin_iman'
+        out.setdefault('propio', {})[k] = float(c.get('h') or 0.0)
+        out.setdefault('garage', {})[k] = {'id': c.get('id'), 'nombre': c.get('nombre') or '', 'tipo': c.get('tipo') or 'casa'}
+    return out
+
+
 def clase_de(h, car):
-    try: return (h or DEFAULT)['clases'].get(str(int(car)), 'sin_iman')
+    try: return (h or DEFAULT)['clases'].get(_k(car), 'sin_iman')
     except (TypeError, ValueError, AttributeError): return 'sin_iman'
 
 
@@ -126,7 +150,7 @@ def seg_clase(h, car):
 
 def garage_de(h, car):
     """Coche del Garage que corre con ese mando ({'id','nombre'}) o None. Viene en h['garage'] (garage.efectivo)."""
-    try: g = ((h or {}).get('garage') or {}).get(str(int(car)))
+    try: g = ((h or {}).get('garage') or {}).get(_k(car))
     except (TypeError, ValueError): return None
     return g if isinstance(g, dict) else None
 
@@ -134,7 +158,7 @@ def garage_de(h, car):
 def seg_propio(h, car):
     """Hándicap PROPIO del coche del Garage (se suma a la clase). 0 sin Garage o con el handicap apagado."""
     if not h or not h.get('enabled'): return 0.0
-    try: return float(((h.get('propio') or {}).get(str(int(car)))) or 0.0)
+    try: return float(((h.get('propio') or {}).get(_k(car))) or 0.0)
     except (TypeError, ValueError): return 0.0
 
 

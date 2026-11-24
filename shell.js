@@ -1,7 +1,7 @@
 'use strict';
 // Contenedor de la DEMO: arranca el servidor real (Python) dentro del navegador y muestra la app real en un iframe.
 (function(){
-const V='202611241123';
+const V='202611241243';
 const PY=['durable.py','instancia.py','handicap.py','garage.py','torneo.py','pits.py','gatillo.py','scx.py','live.py','gp.py','micoche.py','esp32usb.py','server.py','demo_glue.py'];
 const NAMES=['Ernesto','Pepe','Lalo','Mica'];
 const PAGES=['index.html','gp.html','micoche.html','scx.html','garage.html'];
@@ -121,10 +121,10 @@ $('dmTorneo').addEventListener('click',async()=>{
     const f=$('app');setTimeout(()=>{$('demoMenu').hidden=true;try{f.contentWindow.location.href=new URL('gp.html?tab=torneo',f.contentWindow.location.href).href;}catch(e){}},900);
   }catch(e){msg(e.message);}
 });
-// 🏎️ Garage de ejemplo: 6 coches genéricos marcados «(ejemplo)», cada uno en su mando.
+// 🏎️ Garage de ejemplo: 6 coches de la casa + 2 de invitados, marcados «(ejemplo)». Nadie los lleva hasta que el piloto lo escoge.
 $('dmGarage').addEventListener('click',async()=>{
   try{const d=await post('/api/garage',{action:'ejemplos'});
-    msg(d.agregados?'Listo: '+d.agregados+' coches de ejemplo en el Garage, cada uno en su mando. Abriendo el Garage…':'El garage de ejemplo ya estaba cargado. Abriendo el Garage…');
+    msg(d.agregados?'Listo: '+d.agregados+' coches de ejemplo (6 de la casa y 2 de invitados). Cada piloto escoge su coche y su mando al armar la carrera. Abriendo el Garage…':'El garage de ejemplo ya estaba cargado. Abriendo el Garage…');
     const f=$('app');setTimeout(()=>{$('demoMenu').hidden=true;try{f.contentWindow.location.href=new URL('garage.html',f.contentWindow.location.href).href;}catch(e){}},900);
   }catch(e){msg(e.message);}
 });

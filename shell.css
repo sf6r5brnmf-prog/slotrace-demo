@@ -26,3 +26,9 @@ html,body{margin:0;height:100%;background:#0b0d11;color:#f5f7fa;font-family:syst
 .dm-actions{display:flex;flex-wrap:wrap;gap:8px}
 .dm-danger{color:#ff8a84!important;border-color:#ff8a8466!important}
 .dm-msg{color:var(--lime);font-size:13px;min-height:16px;margin:10px 0 0}
+
+.stale-tab{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:24px;background:#0b0d11ee}
+.stale-tab[hidden]{display:none}
+.stale-box{max-width:460px;border:1px solid #2a313c;border-top:6px solid #ffb02e;border-radius:16px;padding:22px;background:#151a21;color:#f2f5f8;font:16px/1.5 system-ui}
+.stale-box h2{margin:0 0 10px;font-size:22px}
+.stale-box button{margin-top:14px;font:800 17px system-ui;padding:12px 18px;border-radius:12px;border:0;background:#d7ff3a;color:#111;width:100%}

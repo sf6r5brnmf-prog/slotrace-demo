@@ -1,7 +1,7 @@
 'use strict';
 // Contenedor de la DEMO: arranca el servidor real (Python) dentro del navegador y muestra la app real en un iframe.
 (function(){
-const V='202611241422';
+const V='202611241437';
 const PY=['durable.py','instancia.py','handicap.py','garage.py','ranking.py','torneo.py','pits.py','gatillo.py','scx.py','live.py','gp.py','micoche.py','esp32usb.py','server.py','demo_glue.py'];
 const NAMES=['Ernesto','Pepe','Lalo','Mica'];
 const PAGES=['index.html','gp.html','micoche.html','scx.html','garage.html','ranking.html'];
@@ -12,8 +12,35 @@ const avatarUrls=new Map();
 function progress(msg,pct){$('bootMsg').textContent=msg;$('bootBar').style.width=pct+'%';}
 function fail(e){console.error(e);const b=$('bootErr');b.hidden=false;b.textContent='No se pudo arrancar la demo ('+(e&&e.message||e)+'). Revisa el internet y vuelve a cargar la página.';}
 function syncfs(populate){return new Promise((res,rej)=>FS.syncfs(populate,err=>err?rej(err):res()));}
+// ---------- Una sola pestaña guarda ----------
+// Los datos viven en el teléfono (IndexedDB). Si la demo está abierta en dos pestañas, cada una tiene su copia y al
+// guardar la vieja BORRABA lo que la otra había agregado (así se perdían coches del Garage). Ahora la pestaña más
+// nueva es la dueña: antes de abrir pide a las otras que guarden y se detengan; las otras ya no guardan nada.
+const TAB=Math.random().toString(36).slice(2)+Date.now().toString(36),OWNER_KEY='slotrace-demo-dueno';
+const chan=('BroadcastChannel' in window)?new BroadcastChannel('slotrace-demo-datos'):null;
+let owner=false;
+function ownerNow(){try{return localStorage.getItem(OWNER_KEY);}catch(e){return null;}}
+function soyDueno(){if(!owner)return false;const o=ownerNow();if(o&&o!==TAB){ceder();return false;}return true;}
+function ceder(){
+  if(stopped&&!owner)return;owner=false;stopped=true;clearInterval(ticker);clearInterval(saver);
+  const b=$('staleTab');if(b)b.hidden=false;
+}
+async function pedirPestana(){
+  // Las pestañas viejas guardan lo último que tienen y se detienen; luego ésta lee los datos ya completos.
+  if(chan){
+    let n=0;const listo=new Promise(res=>{const t=setTimeout(res,1500);chan.onmessage=e=>{const d=e.data||{};
+      if(d.t==='listo'&&d.para===TAB){n++;clearTimeout(t);setTimeout(res,300);}};});
+    chan.postMessage({t:'hola',de:TAB});await listo;
+  }
+  try{localStorage.setItem(OWNER_KEY,TAB);}catch(e){}
+  owner=true;
+  if(chan)chan.onmessage=async e=>{const d=e.data||{};
+    if(d.t==='hola'&&d.de!==TAB){if(owner){try{dirty=true;await persist(true);}catch(x){}}ceder();chan.postMessage({t:'listo',para:d.de});}};
+}
 async function persist(force){
-  if(!FS||syncing||stopped||(!dirty&&!force))return;syncing=true;dirty=false;
+  if(!FS||syncing||stopped||(!dirty&&!force))return;
+  if(!soyDueno())return;
+  syncing=true;dirty=false;
   try{await syncfs(false);}catch(e){dirty=true;}finally{syncing=false;}
 }
 // Fotos del Garage (data/garage-fotos/*.jpg en IndexedDB): igual que los avatares, como blob:.
@@ -64,6 +91,7 @@ async function boot(){
     progress('Cargando el motor de la pista…',8);
     py=await loadPyodide({indexURL:new URL('pyodide/',location.href).href,stdout:t=>console.log('[pista] '+t),stderr:t=>console.warn('[pista] '+t)});window.__demoPy=py;
     FS=py.FS;progress('Abriendo tus datos guardados…',55);
+    await pedirPestana();
     FS.mkdirTree('/data');FS.mount(FS.filesystems.IDBFS,{},'/data');
     try{await syncfs(true);}catch(e){console.warn('IDB',e);}
     progress('Cargando la app…',65);
@@ -84,7 +112,7 @@ async function boot(){
     if(seeded){dirty=true;await persist(true);}
     ticker=setInterval(()=>{try{glue.tick();}catch(e){console.error(e);}},25);
     saver=setInterval(()=>{dirty=true;persist();},4000);
-    document.addEventListener('visibilitychange',()=>{if(document.hidden)persist(true);});
+    document.addEventListener('visibilitychange',()=>{if(document.hidden)persist(true);else soyDueno();});
     window.addEventListener('pagehide',()=>persist(true));
     progress('¡Listo!',100);
     openPage(startPage());
@@ -132,8 +160,9 @@ $('dmGarage').addEventListener('click',async()=>{
     const f=$('app');setTimeout(()=>{$('demoMenu').hidden=true;try{f.contentWindow.location.href=new URL('garage.html',f.contentWindow.location.href).href;}catch(e){}},900);
   }catch(e){msg(e.message);}
 });
+$('staleReload').addEventListener('click',()=>location.reload());
 $('dmReset').addEventListener('click',async()=>{
-  if(!confirm('¿Restablecer la demo? Se borran los pilotos, la configuración y las carreras de este equipo, y vuelven los pilotos de ejemplo.'))return;
+  if(!confirm('¿Restablecer la demo? Se borran los pilotos, los coches del Garage, la configuración y las carreras de este teléfono, y vuelven los pilotos de ejemplo.'))return;
   stopped=true;clearInterval(ticker);clearInterval(saver);
   try{(function rm(dir){FS.readdir(dir).forEach(n=>{if(n==='.'||n==='..')return;const p=dir+'/'+n,st=FS.stat(p);if(FS.isDir(st.mode)){rm(p);FS.rmdir(p);}else FS.unlink(p);});})('/data');
     await syncfs(false);}catch(e){console.error(e);}

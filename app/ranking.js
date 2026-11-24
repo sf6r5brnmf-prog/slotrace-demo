@@ -26,7 +26,7 @@ function render(){
     b.append(document.createTextNode(c.icon+' '+c.nombre+' '),el('b','',String(c.pilotos.length)));b.addEventListener('click',()=>{clase=k;render();});tabs.append(b);});
   const c=data.clases[clase];$('rkCortes').textContent='Cortes de nivel ('+c.icon+' '+c.nombre+'): '+c.cortes;
   const list=$('rkList');list.replaceChildren();
-  if(!c.pilotos.length){const li=el('li','rk-empty');li.append(el('strong','','Todavía no hay tiempos con coches '+c.nombre.toLowerCase()),el('p','muted','Corre una Práctica, Carrera o Gran Premio con un coche de esta clase (del Garage o «Sin ficha»).'));list.append(li);}
+  if(!c.pilotos.length){const li=el('li','rk-empty');li.append(el('strong','','Todavía no hay tiempos con coches '+c.nombre.toLowerCase()),el('p','muted','Corre una Práctica, Carrera o Gran Premio con un coche de esta clase del Garage.'));list.append(li);}
   c.pilotos.forEach(p=>{const li=el('li','rk-row'+(p.pos<=3?' top'+p.pos:''));
     li.append(el('b','rk-pos',p.pos<=3?['🥇','🥈','🥉'][p.pos-1]:String(p.pos)));
     const who=el('div','rk-who');who.append(el('strong','',p.name));

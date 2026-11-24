@@ -253,6 +253,9 @@ class GrandPrix(torneo_mod.TorneoMixin):
                 if not isinstance(ids, list) or not 2 <= len(ids) <= 6 or any(type(i) != int or not 0 <= i <= 5 for i in ids) or len(set(ids)) != len(ids):
                     raise GPError('Elige de 2 a 6 pilotos para el Gran Premio.')
                 if any(not roster['slots'][i] for i in ids): raise GPError('Un piloto ya no está registrado. Vuelve a elegir.', 409)
+                if payload.get('mode') != 'torneo' and getattr(self, 'garage_read', None) and getattr(self, 'exigir_coche', True):
+                    q = garage_mod.faltan(self.garage_read(), self._uso(), ids, {str(i): roster['slots'][i]['name'] for i in ids})
+                    if q: raise GPError(garage_mod.aviso_faltan(q), 409)
                 cars = dict(self.config.get('cars', {}))
                 if isinstance(payload.get('cars'), dict): cars.update(clean_config({'cars': payload['cars']}, self.config)['cars'])
                 chosen = [cars.get(str(i), i + 1) for i in ids]
@@ -304,6 +307,10 @@ class GrandPrix(torneo_mod.TorneoMixin):
                     if rep:
                         quien = [self.pilot(x)['name'] for x in run['participants'] if self.pilot(x).get('garage_id') == rep]
                         raise GPError('%s llevan el mismo coche en esta manga. Cambien uno antes de Empezar.' % ' y '.join(quien), 409)
+                if getattr(self, 'garage_read', None) and getattr(self, 'exigir_coche', True):
+                    ps = run['participants'] or []
+                    q = garage_mod.faltan(self.garage_read(), {x: self.pilot(x).get('garage_id') for x in ps}, ps, {str(x): self.pilot(x)['name'] for x in ps})
+                    if q: raise GPError(garage_mod.aviso_faltan(q), 409)
                 run['h_gar'] = self.gar_entradas(run['participants'] or [])
                 if g['config']['lights_enabled']:
                     run.update(phase='countdown', countdown_until=time.monotonic() + g['config']['lights_seconds'], countdown_total=g['config']['lights_seconds'])

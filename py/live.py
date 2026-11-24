@@ -713,6 +713,9 @@ class Live:
                 if typ not in ['race','practice'] or mode not in ['ultimo','chelas']:raise LiveError('Elige Carrera o Práctica y un modo válido.')
                 if not isinstance(ids,list) or not 1<=len(ids)<=6 or any(type(i)!=int or i<0 or i>5 for i in ids) or len(set(ids))!=len(ids):raise LiveError('Selecciona de uno a seis pilotos.')
                 if any(not roster['slots'][i] for i in ids):raise LiveError('Un piloto ya no está registrado. Vuelve a elegir participantes.',409)
+                # 🏎️ Cada piloto que corre lleva un coche del Garage (casa o invitados): de ahí salen su clase y su hándicap.
+                fc=getattr(self,'falta_coche',None);falta=fc(ids,roster) if fc else None
+                if falta:raise LiveError(falta,409)
                 if self.session:
                     durable.escribir_json(self.directory/'sessions'/(self.session['id']+'.json'),self.session)
                 pilots=[]

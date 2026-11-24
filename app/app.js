@@ -594,9 +594,9 @@ function renderLapConfig(force=false){
     const sel=element('select');sel.setAttribute('aria-label','Coche de '+p.name);
     for(let c=1;c<=6;c++){const o=element('option','','Coche '+c);o.value=String(c);sel.append(o);}
     sel.value=String(carFor(i));sel.addEventListener('change',()=>setCar(i,Number(sel.value)));
-    // La clase (imán o no) y el hándicap son del COCHE que lleva en esta carrera (Garage o «sin ficha»), nunca del piloto.
+    // La clase (imán o no) y el hándicap son del COCHE que lleva en esta carrera (Garage de la casa o de invitados), nunca del piloto.
     const k=PeluGarage.claseDe(i),gc=PeluGarage.uso(i);
-    const hc=element('span','hc-chip',PeluHandicap.ICON[k]+' '+PeluHandicap.NOMBRE[k]+' · '+PeluHandicap.segTxt(hcCfg().seg[k]));hc.title=gc?'La clase la pone el coche del Garage: '+gc.nombre:'Coche sin ficha: escoge su clase en la lista de coches';
+    const hc=element('span','hc-chip'+(k?'':' falta'),k?PeluHandicap.ICON[k]+' '+PeluHandicap.NOMBRE[k]+' · '+PeluHandicap.segTxt(hcCfg().seg[k]):'⚠️ Falta escoger coche');hc.title=gc?'La clase la pone el coche del Garage: '+gc.nombre:'Escoge un coche del Garage o «➕ Coche de invitado nuevo…»';
     const sels=element('span','car-selects');sels.append(sel);
     sels.append(PeluGarage.pilot(i,p.name,rosterNames(),()=>renderLapConfig(true),m=>{$('lapConfigError').textContent=m;}),hc);
     const nv=p.nivel||'intermedio';row.append(element('span','',p.name+' · '+PeluHandicap.NIVEL_ICON[nv]+' '+PeluHandicap.nivelTxt(nv)),sels);target.append(row);

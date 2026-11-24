@@ -91,7 +91,7 @@ function renderConfig(cfg){
   // Por nivel del piloto + nivel automático por tiempo: se guarda al momento (data/vueltas.json), igual que en el menú.
   const nb=el('div','hc-nivel');nb.id='gpHcNivel';box.append(nb);
   PeluHandicap.nivelSettings(nb,h,async part=>{try{await saveHandicap(part);$('configMsg').textContent='Guardado.';}catch(e){$('configMsg').textContent=e.message;}},m=>{$('configMsg').textContent=m;});
-  box.append(el('p','muted','Los de fábrica (Con imán +0.5 s, Modificado +1 s, Sin imán 0 s) son ejemplos: cámbialos. La clase es del coche: en «Nuevo Gran Premio» cada piloto escoge su coche del Garage o «Sin ficha» con su clase. Queda fijo al arrancar la primera parte del Gran Premio.'));
+  box.append(el('p','muted','Los de fábrica (Con imán +0.5 s, Modificado +1 s, Sin imán 0 s) son ejemplos: cámbialos. La clase es del coche: en «Nuevo Gran Premio» cada piloto escoge su coche del Garage (casa o invitados). Queda fijo al arrancar la primera parte del Gran Premio.'));
   f.append(box);
 }
 function hcCfg(){return state?.handicap_cfg||{enabled:true,seg:{sin_iman:0,con_iman:0.5,modificado:1},clases:{},nivel_on:true,seg_nivel:{novato:-0.3,intermedio:0,experto:0.3},nivel_auto:'sugerir'};}
@@ -128,9 +128,9 @@ function renderSetup(force){
       const cb=el('input');cb.type='checkbox';cb.checked=picked.has(i);cb.addEventListener('change',()=>{cb.checked?picked.add(i):picked.delete(i);card.classList.toggle('on',cb.checked);});
       const img=el('img');img.src=p.avatar;img.alt='';const name=el('span','pick-name');name.append(el('strong','',p.name),el('small','','Equipo '+TEAM[i]));
       const sel=el('select','pick-mando');sel.setAttribute('aria-label','Mando de '+p.name);for(let k=1;k<=6;k++){const o=el('option','','🎮 Mando '+k);o.value=k;sel.append(o);}sel.value=carPick[i];sel.addEventListener('click',e=>e.preventDefault&&e.stopPropagation());
-      // La clase y el hándicap son del COCHE que lleva (Garage o «sin ficha» con su clase), nunca del piloto ni del mando.
+      // La clase y el hándicap son del COCHE que lleva (Garage de la casa o de invitados), nunca del piloto ni del mando.
       const hh=hcCfg(),kc=PeluGarage.claseDe(i),gc=PeluGarage.uso(i);
-      const hsel=el('span','hc-chip',PeluHandicap.ICON[kc]+' '+PeluHandicap.NOMBRE[kc]+(hh.enabled?' · '+PeluHandicap.segTxt(hh.seg[kc]):''));hsel.title=gc?'La clase la pone el coche del Garage: '+gc.nombre:'Coche sin ficha: su clase se escoge en la lista de coches';
+      const hsel=el('span','hc-chip'+(kc?'':' falta'),kc?PeluHandicap.ICON[kc]+' '+PeluHandicap.NOMBRE[kc]+(hh.enabled?' · '+PeluHandicap.segTxt(hh.seg[kc]):''):'⚠️ Falta escoger coche');hsel.title=gc?'La clase la pone el coche del Garage: '+gc.nombre:'Escoge un coche del Garage o «➕ Coche de invitado nuevo…»';
       sel.addEventListener('change',()=>{carPick[i]=Number(sel.value);renderSetup(true);});
       // Nivel del piloto (se guarda en el registro): suma o resta por vuelta además de la clase del coche.
       const nv=p.nivel||'intermedio',nsel=el('select','nv-sel');nsel.setAttribute('aria-label','Nivel de '+p.name);

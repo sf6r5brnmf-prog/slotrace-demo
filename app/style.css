@@ -104,3 +104,5 @@
 .mejores-box .mj-v{padding:3px 8px;border-radius:99px;background:#ffffff14}
 .mejores-box .mj-v.none{opacity:.65}
 .hc-chip{display:inline-flex;align-items:center;padding:6px 10px;border-radius:10px;background:#ffffff12;font:700 13px system-ui;white-space:nowrap}
+.hc-chip.falta{background:#ff4b4b22;color:#ff8a8a}
+.gar-sel.falta{border-color:#ff4b4b;color:#ffb3b3}

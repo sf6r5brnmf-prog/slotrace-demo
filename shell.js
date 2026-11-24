@@ -1,7 +1,7 @@
 'use strict';
 // Contenedor de la DEMO: arranca el servidor real (Python) dentro del navegador y muestra la app real en un iframe.
 (function(){
-const V='202611241340';
+const V='202611241422';
 const PY=['durable.py','instancia.py','handicap.py','garage.py','ranking.py','torneo.py','pits.py','gatillo.py','scx.py','live.py','gp.py','micoche.py','esp32usb.py','server.py','demo_glue.py'];
 const NAMES=['Ernesto','Pepe','Lalo','Mica'];
 const PAGES=['index.html','gp.html','micoche.html','scx.html','garage.html','ranking.html'];
@@ -115,9 +115,13 @@ $('dmFalse').addEventListener('click',async()=>{try{await post('/api/sim',{false
 // Torneo: 12 pilotos de ejemplo (3 expertos, 5 intermedios, 4 novatos) y mangas de 1 minuto para enseñarlo rápido.
 const TORNEO_DEMO=[['Ernesto','experto'],['Pepe','experto'],['Lalo','intermedio'],['Mica','novato'],['Javi','experto'],['Kike','intermedio'],['Memo','intermedio'],['Paco','novato'],['Toño','intermedio'],['Beto','novato'],['Chuy','intermedio'],['Rafa','novato']];
 $('dmTorneo').addEventListener('click',async()=>{
-  try{await post('/api/inscritos',{pilotos:TORNEO_DEMO.map(([name,nivel])=>({name,nivel}))});
+  try{// Cada piloto corre con un coche del Garage: 8 de ejemplo + 4 de invitados nuevos, uno distinto por piloto.
+    let g=await post('/api/garage',{action:'ejemplos'});const ids=g.cars.filter(c=>!/^Coche de .* \(ejemplo\)$/.test(c.nombre)).map(c=>c.id).slice(0,8);
+    const CL=['sin_iman','con_iman','modificado'];
+    for(let k=ids.length;k<TORNEO_DEMO.length;k++){const nm=TORNEO_DEMO[k][0];const ya=g.cars.find(c=>c.nombre==='Coche de '+nm+' (ejemplo)');if(ya){ids.push(ya.id);continue;}const d=await post('/api/garage',{action:'rapido',car:{nombre:'Coche de '+nm+' (ejemplo)',clase:CL[k%3],h:0,dueno:nm}});ids.push(d.saved);}
+    await post('/api/inscritos',{pilotos:TORNEO_DEMO.map(([name,nivel],k)=>({name,nivel,garage_id:ids[k]}))});
     await post('/api/gp/config',{config:{torneo_cars:3,torneo_minutes:1,torneo_final_laps:5,preset:'personal'}});
-    msg('Listo: 12 pilotos inscritos, mangas de 1 min. Abriendo Gran Premio → Torneo por mangas…');
+    msg('Listo: 12 pilotos inscritos, cada uno con su coche del Garage, mangas de 1 min. Abriendo Gran Premio → Torneo por mangas…');
     const f=$('app');setTimeout(()=>{$('demoMenu').hidden=true;try{f.contentWindow.location.href=new URL('gp.html?tab=torneo',f.contentWindow.location.href).href;}catch(e){}},900);
   }catch(e){msg(e.message);}
 });

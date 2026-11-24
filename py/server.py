@@ -438,6 +438,12 @@ def wire(server):
         g=server.garage.read();return handicap_mod.con_pilotos(server.lap_config.handicap(),garage_mod.entradas(g,g.get('uso'),range(6)))
     live.current_handicap=hc_live;gp.handicap_actual=server.lap_config.handicap
     gp.garage_read=server.garage.read
+    server.exigir_coche=True   # cada piloto que corre lleva coche del Garage (las pruebas viejas de vueltas lo apagan)
+    def falta_coche(ids,roster):
+        if not getattr(server,'exigir_coche',True):return None
+        g=server.garage.read();q=garage_mod.faltan(g,g.get('uso'),ids,{str(i):(roster['slots'][i] or {}).get('name') for i in ids})
+        return garage_mod.aviso_faltan(q) if q else None
+    live.falta_coche=falta_coche
     # Bandera amarilla del piloto: triple clic del botón de cambio de carril (la tarjeta SCX solo se escucha).
     # Una sola configuración (Gran Premio → Configuración) para GP, Práctica y Carrera.
     flag_cfg=lambda:gp_flag_config(gp.gp['config'] if gp.gp and gp.gp.get('status')=='active' else gp.config)

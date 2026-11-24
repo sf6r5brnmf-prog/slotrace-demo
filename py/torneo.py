@@ -73,7 +73,7 @@ def limpiar_inscritos(raw):
         pid = p.get('id') if isinstance(p.get('id'), str) and re.fullmatch(r'[a-z0-9]{1,16}', p.get('id') or '') else uuid.uuid4().hex[:10]
         q = {'id': pid, 'name': name, 'nivel': nivel}
         gid = p.get('garage_id')   # su coche del Garage (casa o invitados): lo lleva a todas sus mangas
-        if isinstance(gid, str) and re.fullmatch(r'[0-9a-f]{12}|clase:(sin_iman|con_iman|modificado)', gid): q['garage_id'] = gid
+        if isinstance(gid, str) and re.fullmatch(r'[0-9a-f]{12}', gid): q['garage_id'] = gid
         for k in ('sugerido', 'nivel_cambio'):   # nivel automático por tiempo (ver handicap.aplicar_nivel)
             x = handicap_mod.limpiar_sugerido(p.get(k))
             if x: q[k] = x
@@ -330,12 +330,12 @@ class TorneoMixin:
             # El piloto cambia su coche (del Garage de la casa o de invitados) y lo lleva a sus siguientes mangas.
             s, gid = payload.get('slot'), payload.get('garage_id') or ''
             if type(s) != int or not any(p['slot'] == s for p in g['pilots']): raise TorneoError('Piloto inválido.')
-            if gid and not (isinstance(gid, str) and re.fullmatch(r'[0-9a-f]{12}|clase:(sin_iman|con_iman|modificado)', gid)): raise TorneoError('Coche inválido.')
+            if gid and not (isinstance(gid, str) and re.fullmatch(r'[0-9a-f]{12}', gid)): raise TorneoError('Coche inválido.')
             ri = self._run_de(ronda, s)
             if ri is not None:
                 run = g['runs'][ri]
                 if run['phase'] != 'ready' or ri < g['current']: raise TorneoError('Su manga ya arrancó: el cambio de coche vale para la siguiente.')
-                otro = next((x for x in run['participants'] if x != s and gid and not gid.startswith('clase:') and self.pilot(x).get('garage_id') == gid), None)
+                otro = next((x for x in run['participants'] if x != s and gid and self.pilot(x).get('garage_id') == gid), None)
                 if otro is not None: raise TorneoError('Ese coche ya está en uso con %s en esta manga.' % self.pilot(otro)['name'], 409)
             self.pilot(s)['garage_id'] = gid
             g['notice'] = '%s cambió de coche.' % self.pilot(s)['name']

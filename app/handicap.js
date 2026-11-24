@@ -112,7 +112,7 @@
   function garCars(){return (GAR.data&&GAR.data.cars)||[];}
   function garCar(id){return id?garCars().find(c=>c.id===id)||null:null;}
   function garUso(slot){const d=GAR.data;return d?garCar((d.uso||{})[String(slot)]):null;}
-  function garClaseDe(slot){const d=GAR.data;const v=d?(d.uso||{})[String(slot)]||'':'';const c=garCar(v);if(c)return c.clase;const m=/^clase:(\w+)$/.exec(v);return m?m[1]:'sin_iman';}
+  function garClaseDe(slot){const c=garUso(slot);return c?c.clase:null;}
   function garUsadoPor(id){const d=GAR.data;if(!d)return null;const e=Object.entries(d.uso||{}).find(([k,v])=>v===id);return e?Number(e[0]):null;}
   async function garPost(body){
     const r=await fetch('/api/garage',{method:'POST',headers:{'Content-Type':'application/json','X-Roster':'1'},body:JSON.stringify(body)});
@@ -150,16 +150,15 @@
   function garPicker(o){
     const s=document.createElement('select');s.className='gar-sel';s.setAttribute('aria-label',o.aria||'Coche del Garage');
     const add=(parent,v,t,dis)=>{const op=document.createElement('option');op.value=v;op.textContent=t;op.disabled=!!dis;parent.append(op);return op;};
-    // Sin coche del Garage: la clase (imán o no) se escoge AQUÍ, al vincular; nunca en el alta del piloto.
-    const sg=document.createElement('optgroup');sg.label='Coche sin ficha (escoge su clase)';
-    CLASES.forEach(([k,n])=>add(sg,k==='sin_iman'?'':'clase:'+k,'Sin ficha · '+ICON[k]+' '+n));s.append(sg);
+    // Cada piloto corre con un coche del Garage (casa o invitados); si no trae, «➕ Coche de invitado nuevo…».
+    add(s,'','🏎️ Escoge su coche…');
     [['casa','🏠 Garage de la casa'],['invitado','🧳 Garage de invitados']].forEach(([t,lbl])=>{
       const cs=garCars().filter(c=>(c.tipo||'casa')===t);if(!cs.length)return;
       const g=document.createElement('optgroup');g.label=lbl;
       cs.forEach(c=>{const u=(o.usados||{})[c.id];add(g,c.id,'🏎️ '+garCarTxt(c)+(t==='invitado'&&c.dueno?' · de '+c.dueno:'')+(u?' · en uso con '+u:''),!!u&&c.id!==o.cur);});
       s.append(g);});
     if(o.onNuevo)add(s,'__nuevo','➕ Coche de invitado nuevo…');
-    s.value=o.cur&&(garCar(o.cur)||/^clase:(con_iman|modificado)$/.test(o.cur))?o.cur:'';const prev=s.value;
+    s.value=o.cur&&garCar(o.cur)?o.cur:'';const prev=s.value;s.classList.toggle('falta',!s.value);
     s.addEventListener('click',e=>e.stopPropagation());
     s.addEventListener('change',async()=>{
       try{

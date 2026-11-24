@@ -97,5 +97,40 @@
     }
     if(realNode){const t=use?'real '+Number(raw).toFixed(2)+' s':'';realNode.hidden=!t;if(realNode.textContent!==t)realNode.textContent=t;}
   }
+  // ---------- 🏎️ Garage: coches físicos con su ficha y su propio hándicap (data/garage.json en la Mac) ----------
+  // pista = {mando: id}: qué coche del Garage corre con cada mando (1-6). Lo usan Práctica, Carrera, Gran Premio y Torneo.
+  const GAR={data:null,listeners:[],timer:null};
+  function garEmit(){GAR.listeners.forEach(f=>{try{f(GAR.data);}catch(e){console.error(e);}});}
+  async function garLoad(){
+    try{const r=await fetch('/api/garage',{cache:'no-store'});if(!r.ok)return GAR.data;const d=await r.json();
+      const ch=!GAR.data||d.version!==GAR.data.version;GAR.data=d;if(ch)garEmit();}catch(e){}
+    return GAR.data;
+  }
+  function garStart(ms){if(GAR.timer)return;garLoad();GAR.timer=setInterval(garLoad,ms||5000);}
+  function garCars(){return (GAR.data&&GAR.data.cars)||[];}
+  function garOn(m){const d=GAR.data;if(!d)return null;const id=(d.pista||{})[String(m)];return id?garCars().find(c=>c.id===id)||null:null;}
+  async function garPost(body){
+    const r=await fetch('/api/garage',{method:'POST',headers:{'Content-Type':'application/json','X-Roster':'1'},body:JSON.stringify(body)});
+    let d={};try{d=await r.json();}catch(e){}
+    if(!r.ok)throw Error(d.error||'No se pudo guardar en el Garage.');
+    GAR.data=d;garEmit();return d;
+  }
+  function garCarTxt(c){return c.nombre+(c.chip?' · chip '+c.chip:'')+' · '+ICON[c.clase]+(c.h?' '+segTxt(c.h):'');}
+  // <select> «🏎️ Coche del Garage» para el mando actual. onPick(mando, coche|null) después de guardarlo en la Mac.
+  // Un coche con chip solo corre con SU mando: al elegirlo, el piloto se cambia a ese mando.
+  function garSelect(mando,onPick,onError){
+    const s=document.createElement('select');s.className='gar-sel';s.setAttribute('aria-label','Coche del Garage (mando '+mando+')');
+    const o0=document.createElement('option');o0.value='';o0.textContent=garCars().length?'🏎️ Sin coche del Garage':'🏎️ Garage vacío';s.append(o0);
+    garCars().forEach(c=>{const o=document.createElement('option');o.value=c.id;o.textContent='🏎️ '+garCarTxt(c);s.append(o);});
+    const cur=garOn(mando);s.value=cur?cur.id:'';
+    s.addEventListener('click',e=>e.stopPropagation());
+    s.addEventListener('change',async()=>{
+      const c=garCars().find(x=>x.id===s.value)||null,m=c&&c.chip?c.chip:mando;
+      try{await garPost({action:'pista',mando:c?m:mando,id:c?c.id:''});if(onPick)onPick(c?m:mando,c);}
+      catch(e){const k=garOn(mando);s.value=k?k.id:'';if(onError)onError(e.message);}
+    });
+    return s;
+  }
+  window.PeluGarage={load:garLoad,start:garStart,cars:garCars,on:garOn,post:garPost,select:garSelect,txt:garCarTxt,onChange:f=>GAR.listeners.push(f),get data(){return GAR.data;}};
   window.PeluHandicap={CLASES,ICON,NOMBRE,MIN_VUELTA_H,segTxt,adj,label,setTime,upgrade,NIVELES,NIVEL,NIVEL_ICON,AUTO,nivelTxt,detalle,cortesTxt,sugTxt,nivelSettings,nivelPicker};
 })();

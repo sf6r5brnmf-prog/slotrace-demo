@@ -118,10 +118,29 @@ def clase_de(h, car):
     except (TypeError, ValueError, AttributeError): return 'sin_iman'
 
 
-def seg_coche(h, car):
-    """Segundos por vuelta por la clase del coche (0 si el handicap está apagado)."""
+def seg_clase(h, car):
+    """Segundos por vuelta por la CLASE del coche (Configuración; 0 si el handicap está apagado)."""
     if not h or not h.get('enabled'): return 0.0
     return float(h['seg'].get(clase_de(h, car), 0.0))
+
+
+def garage_de(h, car):
+    """Coche del Garage que corre con ese mando ({'id','nombre'}) o None. Viene en h['garage'] (garage.efectivo)."""
+    try: g = ((h or {}).get('garage') or {}).get(str(int(car)))
+    except (TypeError, ValueError): return None
+    return g if isinstance(g, dict) else None
+
+
+def seg_propio(h, car):
+    """Hándicap PROPIO del coche del Garage (se suma a la clase). 0 sin Garage o con el handicap apagado."""
+    if not h or not h.get('enabled'): return 0.0
+    try: return float(((h.get('propio') or {}).get(str(int(car)))) or 0.0)
+    except (TypeError, ValueError): return 0.0
+
+
+def seg_coche(h, car):
+    """Segundos por vuelta por el coche = clase + hándicap propio del coche del Garage."""
+    return round(seg_clase(h, car) + seg_propio(h, car), 2)
 
 
 def seg_nivel(h, nivel):
@@ -145,11 +164,12 @@ def activo(h, cars=None, niveles=None):
 
 
 def detalle(h, car, nivel=None):
-    """«🧲 +0.5 · Experto +0.3» (las dos partes del ajuste)."""
-    k = clase_de(h, car); hc = seg_coche(h, car); hn = seg_nivel(h, nivel)
+    """«🧲 +0.5 s · 🏎️ Rayo +0.2 s · Experto +0.3 s» (clase, coche del Garage y nivel)."""
+    k = clase_de(h, car); hc = seg_clase(h, car); hp = seg_propio(h, car); hn = seg_nivel(h, nivel)
     partes = []
-    if hc and hn: partes.append('%s %s' % (ICON[k], texto_seg(hc)))   # corto cuando van las dos partes
-    elif hc or not hn: partes.append('%s %s %s' % (ICON[k], NOMBRE[k], texto_seg(hc)))
+    if hc and (hn or hp): partes.append('%s %s' % (ICON[k], texto_seg(hc)))   # corto cuando van varias partes
+    elif hc or not (hn or hp): partes.append('%s %s %s' % (ICON[k], NOMBRE[k], texto_seg(hc)))
+    if hp: partes.append('🏎️ %s %s' % ((garage_de(h, car) or {}).get('nombre') or 'coche', texto_seg(hp)))
     if hn: partes.append('%s %s' % (NIVEL_TXT[nivel_ok(nivel)], texto_seg(hn)))
     return ' · '.join(partes)
 
@@ -157,16 +177,18 @@ def detalle(h, car, nivel=None):
 def info(h, car, nivel=None):
     """Lo que necesita cada pantalla para un coche y su piloto: clase, nivel y las dos partes del ajuste."""
     k = clase_de(h, car); n = nivel_ok(nivel)
+    g = garage_de(h, car) or {}
     return {'clase': k, 'clase_txt': NOMBRE[k], 'h_s': seg_de(h, car, n), 'h_coche': seg_coche(h, car),
+            'h_clase': seg_clase(h, car), 'h_propio': seg_propio(h, car), 'coche_nombre': g.get('nombre') or '', 'garage_id': g.get('id') or '',
             'nivel': n, 'nivel_txt': NIVEL_TXT[n], 'h_nivel': seg_nivel(h, n), 'h_txt': detalle(h, car, n)}
 
 
 def csv_cols(hi):
-    """Columnas del CSV: Clase, Handicap coche, Nivel, Handicap nivel, Handicap total (s por vuelta)."""
-    return [hi.get('clase_txt', ''), '%.2f' % (hi.get('h_coche') or 0.0), hi.get('nivel_txt', ''), '%.2f' % (hi.get('h_nivel') or 0.0), '%.2f' % (hi.get('h_s') or 0.0)]
+    """Columnas del CSV: coche del Garage, clase, handicap de clase, propio del coche, del coche (suma), nivel, de nivel y TOTAL."""
+    return [hi.get('coche_nombre', ''), hi.get('clase_txt', ''), '%.2f' % (hi.get('h_clase', hi.get('h_coche')) or 0.0), '%.2f' % (hi.get('h_propio') or 0.0), '%.2f' % (hi.get('h_coche') or 0.0), hi.get('nivel_txt', ''), '%.2f' % (hi.get('h_nivel') or 0.0), '%.2f' % (hi.get('h_s') or 0.0)]
 
 
-CSV_HEAD = ['Clase', 'Handicap coche (s)', 'Nivel', 'Handicap nivel (s)', 'Handicap (s por vuelta)']
+CSV_HEAD = ['Coche (garage)', 'Clase', 'Handicap clase (s)', 'Handicap propio coche (s)', 'Handicap coche (s)', 'Nivel', 'Handicap nivel (s)', 'Handicap (s por vuelta)']
 
 
 # Con ajuste negativo (resta), una vuelta ajustada nunca baja de este mínimo (ni de 0): p. ej. 10.2 s − 10 s

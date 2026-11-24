@@ -61,3 +61,6 @@
 .mc-turno.eliminado{border-color:#b3261e;background:#2a1416}.mc-turno.eliminado .mc-turno-tag{background:#b3261e}
 .mc-turno.campeon{border-color:#f5c542;background:#2a2410}.mc-turno.campeon .mc-turno-tag{background:#f5c542;color:#1a1400}
 .mc-sug{margin:8px 0;padding:10px 12px;border-radius:12px;border:1px solid #f5c54288;background:#2a2410;color:#f5d77a;font-weight:700}.mc-sug[hidden]{display:none}
+.mc-garage{display:flex;gap:12px;align-items:center;margin:8px 0;padding:10px 12px;border-radius:14px;border:1px solid #303743;background:#141922}.mc-garage[hidden]{display:none}
+.mc-garage img{width:72px;height:54px;object-fit:cover;border-radius:9px;background:#0b0d11;flex:0 0 auto}.mc-garage img[hidden]{display:none}.mc-gar-sw{width:54px;height:54px;border-radius:9px;flex:0 0 auto;display:flex;align-items:center;justify-content:center}.mc-gar-sw::after{content:'🏎️';font-size:28px}.mc-gar-sw[hidden]{display:none}
+.mc-garage div{display:flex;flex-direction:column;min-width:0}.mc-garage small{color:#aab4c2;font-size:12px}.mc-garage strong{font-size:18px;overflow-wrap:anywhere}.mc-garage span{color:#cfd6e0;font-size:13px}

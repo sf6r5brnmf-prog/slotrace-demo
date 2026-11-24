@@ -1,10 +1,10 @@
 'use strict';
 // Contenedor de la DEMO: arranca el servidor real (Python) dentro del navegador y muestra la app real en un iframe.
 (function(){
-const V='202611211216';
-const PY=['durable.py','instancia.py','handicap.py','torneo.py','pits.py','gatillo.py','scx.py','live.py','gp.py','micoche.py','esp32usb.py','server.py','demo_glue.py'];
+const V='202611241123';
+const PY=['durable.py','instancia.py','handicap.py','garage.py','torneo.py','pits.py','gatillo.py','scx.py','live.py','gp.py','micoche.py','esp32usb.py','server.py','demo_glue.py'];
 const NAMES=['Ernesto','Pepe','Lalo','Mica'];
-const PAGES=['index.html','gp.html','micoche.html','scx.html'];
+const PAGES=['index.html','gp.html','micoche.html','scx.html','garage.html'];
 const COLORS=[['Blanco','#edf2f7'],['Amarillo','#ffe23b'],['Rojo','#ff4d50'],['Azul','#3d96ff'],['Verde','#50dc92'],['Naranja','#ff963d']];
 const $=id=>document.getElementById(id);
 let py=null,glue=null,FS=null,ticker=null,saver=null,syncing=false,dirty=false,stopped=false;
@@ -15,6 +15,12 @@ function syncfs(populate){return new Promise((res,rej)=>FS.syncfs(populate,err=>
 async function persist(force){
   if(!FS||syncing||stopped||(!dirty&&!force))return;syncing=true;dirty=false;
   try{await syncfs(false);}catch(e){dirty=true;}finally{syncing=false;}
+}
+// Fotos del Garage (data/garage-fotos/*.jpg en IndexedDB): igual que los avatares, como blob:.
+function fotoUrl(hex){
+  let u=avatarUrls.get('g'+hex);if(u)return u;
+  try{const bytes=FS.readFile('/data/garage-fotos/'+hex+'.jpg');u=URL.createObjectURL(new Blob([bytes],{type:'image/jpeg'}))+'#foto';avatarUrls.set('g'+hex,u);return u;}
+  catch(e){return 'data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=';}
 }
 function avatarUrl(hex){
   let u=avatarUrls.get(hex);if(u)return u;
@@ -36,10 +42,10 @@ function request(method,path,headers,body){
       const arg=b;
       const out=glue.request(method,path,JSON.stringify(headersObj(headers)),arg);
       const [status,hdrs,text,isB64]=JSON.parse(out);
-      if(method==='POST')dirty=true;
+      if(method==='POST'){dirty=true;setTimeout(()=>persist(),50);}   // guardar en IndexedDB enseguida (no esperar 4 s)
       let payload;
       if(isB64){const bin=atob(text);const a=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);payload=a;}
-      else payload=text.replace(/\/avatars\/([0-9a-f]{32})\.png/g,(m,hex)=>avatarUrl(hex));
+      else payload=text.replace(/\/avatars\/([0-9a-f]{32})\.png/g,(m,hex)=>avatarUrl(hex)).replace(/\/garage-fotos\/([0-9a-f]{32})\.jpg/g,(m,hex)=>fotoUrl(hex));
       resolve({status,headers:hdrs,body:payload});
     }catch(e){console.error('DEMO request',path,e);resolve({status:500,headers:{'Content-Type':'application/json; charset=utf-8'},body:JSON.stringify({error:'Algo falló en el servidor de la demo.'})});}
   });
@@ -113,6 +119,13 @@ $('dmTorneo').addEventListener('click',async()=>{
     await post('/api/gp/config',{config:{torneo_cars:3,torneo_minutes:1,torneo_final_laps:5,preset:'personal'}});
     msg('Listo: 12 pilotos inscritos, mangas de 1 min. Abriendo Gran Premio → Torneo por mangas…');
     const f=$('app');setTimeout(()=>{$('demoMenu').hidden=true;try{f.contentWindow.location.href=new URL('gp.html?tab=torneo',f.contentWindow.location.href).href;}catch(e){}},900);
+  }catch(e){msg(e.message);}
+});
+// 🏎️ Garage de ejemplo: 6 coches genéricos marcados «(ejemplo)», cada uno en su mando.
+$('dmGarage').addEventListener('click',async()=>{
+  try{const d=await post('/api/garage',{action:'ejemplos'});
+    msg(d.agregados?'Listo: '+d.agregados+' coches de ejemplo en el Garage, cada uno en su mando. Abriendo el Garage…':'El garage de ejemplo ya estaba cargado. Abriendo el Garage…');
+    const f=$('app');setTimeout(()=>{$('demoMenu').hidden=true;try{f.contentWindow.location.href=new URL('garage.html',f.contentWindow.location.href).href;}catch(e){}},900);
   }catch(e){msg(e.message);}
 });
 $('dmReset').addEventListener('click',async()=>{

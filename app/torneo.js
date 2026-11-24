@@ -30,7 +30,11 @@ function renderSetup(force){
   const tab=$('torneoTab');if(!tab||tab.hidden&&!force)return;
   if(!ins){loadIns().then(()=>{if(ins)renderSetup(true);});return;}
   const c=cfgT(),n=ins.pilotos.length;
-  const sig=JSON.stringify([ins.version,ins.pilotos,c,addLevel]);if(!force&&sig===setupSig)return;setupSig=sig;
+  const sig=JSON.stringify([ins.version,ins.pilotos,c,addLevel,(PeluGarage.data||{}).version]);if(!force&&sig===setupSig)return;setupSig=sig;
+  // 🏎️ Coches del Garage en pista: en el torneo los mandos se reparten por manga; cada mando corre con SU coche del Garage.
+  const tg=$('tqGarage');if(tg&&!tg.contains(document.activeElement)){tg.replaceChildren();tg.hidden=!PeluGarage.cars().length;
+    if(PeluGarage.cars().length){tg.append(el('p','tq-garage-t','🏎️ Coches del Garage en cada mando (su clase y su hándicap propio cuentan en cada manga):'));
+      const gr=el('div','tq-garage-g');for(let k=1;k<=Math.max(2,Math.min(6,c.torneo_cars||3));k++){const r=el('label','tq-garage-r');r.append(carChip(k),PeluGarage.select(k,()=>renderSetup(true),m=>{$('tqError').textContent=m;}));gr.append(r);}tg.append(gr);}}
   // Formato: coches por manga, minutos, cómo se arman, vueltas de la final (se guarda en la configuración del GP).
   const cf=$('tqConfig');if(!cf.contains(document.activeElement)){cf.replaceChildren();
     const row=(label,input,note)=>{const r=el('label','tq-cfg');r.append(el('span','',label),input);if(note)r.append(el('small','muted',note));cf.append(r);};
@@ -116,6 +120,7 @@ function pilotRow(m,p,editable,showRes){
   const row=el(editable?'button':'div','tq-p'+(p.eliminado?' out':'')+(sel===p.slot?' sel':''));if(editable)row.type='button';
   row.dataset.slot=p.slot;
   row.append(carChip(p.car),el('span','tq-pname',p.name),nivelChip(p.nivel));
+  if(p.coche_nombre)row.append(el('span','tq-gar','🏎️ '+p.coche_nombre));
   if(p.clase&&p.h_s)row.append(el('span','tq-hc',PeluHandicap.detalle(p)+(p.h_coche&&p.h_nivel?' = '+PeluHandicap.segTxt(p.h_s):'')));
   if(showRes&&p.laps!=null){row.append(el('span','tq-res',(p.dsq?'DSQ':p.pos?'P'+p.pos:'—')+' · '+p.laps+' v'+(p.total_h!=null&&state.gp.handicap?.on?' · '+p.total_h.toFixed(1)+' s H':p.total!=null?' · '+p.total.toFixed(1)+' s':'')));}
   if(p.eliminado)row.append(el('span','tq-out','ELIMINADO'));
@@ -133,7 +138,7 @@ function heatBox(g,m,ro,opts){
   const head=el('div','tq-hhead');head.append(el('strong','',m.label.replace(/^Ronda \d+ · /,'')),el('span','tq-ph tq-ph-'+m.phase,ph));box.append(head);
   const showRes=m.phase!=='ready';
   m.pilotos.forEach(p=>{const r=pilotRow(m,p,opts.edit&&m.editable,showRes);
-    if(opts.edit&&m.editable){const cs=el('select','tq-carsel');cs.setAttribute('aria-label','Coche de '+p.name);for(let k=1;k<=6;k++){const o=el('option','','Coche '+k);o.value=k;cs.append(o);}cs.value=String(p.car);
+    if(opts.edit&&m.editable){const cs=el('select','tq-carsel');cs.setAttribute('aria-label','Coche de '+p.name);for(let k=1;k<=6;k++){const gc=PeluGarage.on(k);const o=el('option','','Coche '+k+(gc?' · 🏎️ '+gc.nombre:''));o.value=k;cs.append(o);}cs.value=String(p.car);
       cs.addEventListener('click',e=>e.stopPropagation());cs.addEventListener('change',()=>act('set_car',{slot:p.slot,car:Number(cs.value)}));
       const w=el('div','tq-prow');w.append(r,cs);box.append(w);}else box.append(r);});
   if(m.phase==='done'&&!ro.cerrada&&!ro.final&&m.pilotos.length>1){const u=m.pilotos[m.pilotos.length-1];box.append(el('p','tq-last','Último: '+u.name+' → eliminado al cerrar la ronda'+(ro.vivos-ro.mangas.filter(x=>x.pilotos.length>1).length<FIN?' (salvo la regla de 6)':'')));}
@@ -207,4 +212,5 @@ function renderDone(g){
 }
 window.PeluTorneo={renderSetup,stepper,nextLabel,renderRace,tables,renderDone,formatText,nivelTxt,plan,tamanos};
 document.addEventListener('DOMContentLoaded',wire);
+PeluGarage.onChange(()=>{try{renderSetup(false);}catch(e){}});
 })();

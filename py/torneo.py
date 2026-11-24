@@ -349,6 +349,7 @@ class TorneoMixin:
             return {'slot': r['slot'], 'name': p['name'], 'nivel': p.get('nivel'), 'car': r['car'], 'avatar': p.get('avatar') or '',
                     'clase': r.get('clase'), 'clase_txt': r.get('clase_txt'), 'h_s': r.get('h_s', 0.0), 'h_coche': r.get('h_coche', 0.0),
                     'h_nivel': r.get('h_nivel', 0.0), 'nivel_txt': r.get('nivel_txt'), 'h_txt': r.get('h_txt', ''), 'laps': r['laps'], 'best': r['best'],
+                    'coche_nombre': (handicap_mod.garage_de(hcfg, r['car']) or {}).get('nombre') or '',
                     'total': r.get('total'), 'total_h': r.get('total_h'), 'pos': r.get('pos'), 'dsq': r.get('dsq'), 'finished': r.get('finished'),
                     'eliminado': r['slot'] in elim and elim[r['slot']]['parte'] == run['label']}
         rondas = []

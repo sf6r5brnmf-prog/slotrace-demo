@@ -147,6 +147,8 @@ $('close').addEventListener('click',closeEditor);$('cancel').addEventListener('c
 $('add').addEventListener('click',()=>{if(!roster){notify('Espera la conexión con la Mac.');return;}const i=roster.slots.findIndex(p=>!p);if(i<0){notify('Máximo 6 competidores. Edita o quita uno para liberar un lugar.');return;}openEditor(i);});
 document.addEventListener('keydown',e=>{if($('overlay').hidden)return;if(e.key==='Escape')closeEditor();if(e.key==='Tab'){const nodes=[...$('form').querySelectorAll('button,input')].filter(n=>!n.disabled&&n.getClientRects().length&&!n.classList.contains('file'));const first=nodes[0],last=nodes[nodes.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});
 poll();setInterval(poll,1000);
+// 🏎️ Garage: coches en pista por mando (se refresca solo; al cambiar, se redibujan los selectores).
+PeluGarage.onChange(()=>{renderLapConfig(true);if(screen==='choose')renderParticipants();});PeluGarage.start(5000);
 
 // El registro sigue en el servidor; solo las preferencias del menú son locales.
 const MODES={ultimo:{title:'Puto el último',rule:'el que quede último es el puto.',icon:'⚑'},chelas:{title:'El último paga las chelas',rule:'el último invita las chelas.',icon:'🍻'}};
@@ -199,7 +201,11 @@ function renderParticipants(){
     if(!p)return;const label=element('label','participant-option');label.style.setProperty('--team',roster.colors[i].hex);
     const input=element('input');input.type='checkbox';input.name='pilot';input.value=String(i);input.checked=selectedPilots.has(i);input.addEventListener('change',()=>{input.checked?selectedPilots.add(i):selectedPilots.delete(i);updateSelectionCount();$('selectionError').textContent='';});
     const img=element('img');img.src=avatarSrc(p.avatar);img.alt='Avatar de '+p.name;
-    const text=element('span','participant-name');text.append(element('strong','',p.name),element('small','','Equipo '+roster.colors[i].name+' · Coche '+carFor(i)));label.append(input,img,text);target.append(label);
+    const gc=PeluGarage.on(carFor(i));
+    const text=element('span','participant-name');text.append(element('strong','',p.name),element('small','','Equipo '+roster.colors[i].name+' · Coche '+carFor(i)+(gc?' · 🏎️ '+gc.nombre:'')));label.append(input,img,text);
+    // 🏎️ Coche del Garage para este piloto: su clase y su hándicap propio se suman solos.
+    if(PeluGarage.cars().length){const gs=PeluGarage.select(carFor(i),m=>{if(m!==carFor(i))setCar(i,m);renderParticipants();},m=>{$('selectionError').textContent=m;});gs.classList.add('participant-garage');label.append(gs);}
+    target.append(label);
   });
   if(!roster.slots.some(Boolean))target.append(element('p','help','No hay pilotos registrados. Agrega uno desde Administrar pilotos.'));
   updateSelectionCount();
@@ -280,7 +286,7 @@ function renderSession(){
     card.classList.toggle('dsq',!!p.dsq);card.querySelector('.dsq-badge').hidden=!p.dsq;
     const fl=card.querySelector('.gname .gflags'),used=p.banderas||0,flText=flagsText(used,p.dsq,flagCfg);fl.hidden=!flText;if(fl.textContent!==flText)fl.textContent=flText;
     fl.classList.toggle('dsq',!!p.dsq);fl.classList.toggle('full',!p.dsq&&used>=flagCfg.max);
-    const car=carFor(p.slot),sub=card.querySelector('.gname small'),subText=scxOn?'Coche '+car+' · '+team.name:'Equipo '+team.name;if(sub.textContent!==subText)sub.textContent=subText;
+    const car=carFor(p.slot),sub=card.querySelector('.gname small'),subText=(scxOn?'Coche '+car+' · '+team.name:'Equipo '+team.name)+(p.coche_nombre?' · 🏎️ '+p.coche_nombre:'');if(sub.textContent!==subText)sub.textContent=subText;
     card.querySelector('.track-badge').hidden=p.slot!==s.active||ended;
     const loser=card.querySelector('.last-badge');loser.hidden=!isLast;
     const loserText=(s.mode==='chelas'?'Invita las chelas':'El último')+(worstCount>1?' · empate':'');if(loser.textContent!==loserText)loser.textContent=loserText;
@@ -564,7 +570,10 @@ function renderLapConfig(force=false){
     const hc=element('select','hc-class');hc.setAttribute('aria-label','Clase del coche de '+p.name);
     PeluHandicap.CLASES.forEach(([k,n])=>{const o=element('option','',PeluHandicap.ICON[k]+' '+n+' · '+PeluHandicap.segTxt(hcCfg().seg[k]));o.value=k;hc.append(o);});
     hc.value=hcCfg().clases[String(carFor(i))]||'sin_iman';hc.addEventListener('change',()=>setClase(carFor(i),hc.value));
+    // 🏎️ Garage: si ese mando tiene un coche del Garage en pista, la clase la pone el coche (y suma su hándicap propio).
+    const gc=PeluGarage.on(carFor(i));if(gc){hc.value=gc.clase;hc.disabled=true;hc.title='La clase la pone el coche del Garage: '+gc.nombre;}
     const sels=element('span','car-selects');sels.append(sel,hc);
+    if(PeluGarage.cars().length)sels.append(PeluGarage.select(carFor(i),m=>{if(m!==carFor(i))setCar(i,m);else renderLapConfig(true);},m=>{$('lapConfigError').textContent=m;}));
     const nv=p.nivel||'intermedio';row.append(element('span','',p.name+' · '+PeluHandicap.NIVEL_ICON[nv]+' '+PeluHandicap.nivelTxt(nv)),sels);target.append(row);
   });
   renderHandicapConfig();

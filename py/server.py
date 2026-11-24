@@ -13,6 +13,7 @@ from instancia import InstanceLock
 import micoche
 import torneo as torneo_mod
 import handicap as handicap_mod
+import garage as garage_mod
 
 ROOT = Path(__file__).resolve().parent
 COLORS = [('Blanco','#edf2f7'),('Amarillo','#ffe23b'),('Rojo','#ff4d50'),('Azul','#3d96ff'),('Verde','#50dc92'),('Naranja','#ff963d')]
@@ -85,6 +86,7 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/api/vueltas-config':return self.reply(200,self.server.lap_config.read())
         if path=='/api/diagnostics':return self.reply(200,self.server.live.diagnostics())
         if path in ['/api/live','/api/session']:
+            revisar_garage(self.server)
             return self.reply(200,self.server.live.snapshot(include_sensor_data=False))
         if path=='/api/cruces':
             # Explosión al sensor: solo un contador de cruces del sensor IR. ?explosion=1 = una pantalla grande está escuchando.
@@ -120,7 +122,9 @@ class Handler(BaseHTTPRequestHandler):
                 g=gpo.gp
                 t=None if not g or g.get('mode')!='torneo' or g.get('status')=='cancelled' else {'id':g['id'],'pilots':[{'slot':p['slot'],'name':p['name'],'nivel':p.get('nivel'),'avatar':p.get('avatar') or ''} for p in g['pilots']]}
             return self.reply(200,{'torneo':t})
-        if path=='/api/gp':return self.reply(200,self.server.gp.snapshot())
+        if path=='/api/gp':
+            revisar_garage(self.server)   # barato: solo trabaja cuando algo acaba de terminar
+            return self.reply(200,self.server.gp.snapshot())
         if path=='/api/inscritos':
             revisar_niveles(self.server);return self.reply(200,self.server.inscritos.read())
         if path=='/api/gp/config':return self.reply(200,self.server.gp.get_config())
@@ -140,25 +144,34 @@ class Handler(BaseHTTPRequestHandler):
         if re.fullmatch(r'/sfx/[a-z_]+\.mp3',path):
             file=ROOT/path[1:]
             if file.exists():return self.reply(200,file.read_bytes(),'audio/mpeg')
+        if path=='/api/garage':
+            revisar_garage(self.server)
+            return self.reply(200,self.server.garage.view())
         if path=='/api/roster':
             revisar_niveles(self.server)
+            revisar_garage(self.server)
             with LOCK: d=self.server.store.read()
             return self.reply(200,dict(d,colors=[{'name':n,'hex':h} for n,h in COLORS]))
         assets={'/':('index.html','text/html; charset=utf-8'),'/app.js':('app.js','text/javascript; charset=utf-8'),'/style.css':('style.css','text/css; charset=utf-8'),
                 '/gp':('gp.html','text/html; charset=utf-8'),'/avisos.js':('avisos.js','text/javascript; charset=utf-8'),'/gp.js':('gp.js','text/javascript; charset=utf-8'),'/gauges.js':('gauges.js','text/javascript; charset=utf-8'),'/lights.js':('lights.js','text/javascript; charset=utf-8'),'/paro.js':('paro.js','text/javascript; charset=utf-8'),'/explosion.js':('explosion.js','text/javascript; charset=utf-8'),'/gatillo.js':('gatillo.js','text/javascript; charset=utf-8'),'/gp.css':('gp.css','text/css; charset=utf-8'),
                 '/micoche':('micoche.html','text/html; charset=utf-8'),'/micoche.js':('micoche.js','text/javascript; charset=utf-8'),'/micoche.css':('micoche.css','text/css; charset=utf-8'),'/micoche-icon.png':('micoche-icon.png','image/png'),
-                '/scx':('scx.html','text/html; charset=utf-8'),'/scx.js':('scx.js','text/javascript; charset=utf-8'),'/handicap.js':('handicap.js','text/javascript; charset=utf-8')}
+                '/scx':('scx.html','text/html; charset=utf-8'),'/scx.js':('scx.js','text/javascript; charset=utf-8'),'/handicap.js':('handicap.js','text/javascript; charset=utf-8'),
+                '/garage':('garage.html','text/html; charset=utf-8'),'/garage.js':('garage.js','text/javascript; charset=utf-8'),'/garage.css':('garage.css','text/css; charset=utf-8')}
         if path=='/micoche/':path='/micoche'
+        if path=='/garage/':path='/garage'
         if path in assets:
             filename,mime=assets[path]
             return self.reply(200,(ROOT/filename).read_bytes(),mime)
+        if re.fullmatch(r'/garage-fotos/[0-9a-f]{32}\.jpg',path):
+            file=self.server.garage.directory/path[1:]
+            if file.exists(): return self.reply(200,file.read_bytes(),'image/jpeg')
         if re.fullmatch(r'/avatars/[0-9a-f]{32}\.png',path):
             file=self.server.store.directory/path[1:]
             if file.exists(): return self.reply(200,file.read_bytes(),'image/png')
         self.reply(404,{'error':'No se encontró esa página.'})
     def _post(self):
         route=urlsplit(self.path).path
-        if route not in ['/api/slot','/api/session','/api/gp','/api/gp/config','/api/sim','/api/vueltas-config','/api/scx/simular','/api/inscritos']: return self.reply(404,{'error':'Ruta desconocida.'})
+        if route not in ['/api/slot','/api/session','/api/gp','/api/gp/config','/api/sim','/api/vueltas-config','/api/scx/simular','/api/inscritos','/api/garage']: return self.reply(404,{'error':'Ruta desconocida.'})
         # Un sitio externo no puede escribir con un formulario o fetch sin CORS.
         origin=self.headers.get('Origin')
         if self.headers.get('X-Roster')!='1' or (origin and urlsplit(origin).netloc!=self.headers.get('Host')):
@@ -177,6 +190,9 @@ class Handler(BaseHTTPRequestHandler):
             if route=='/api/inscritos':
                 try:return self.reply(200,self.server.inscritos.write(payload))
                 except torneo_mod.TorneoError as e:return self.reply(e.status,{'error':str(e)})
+            if route=='/api/garage':
+                try:return self.reply(200,self.server.garage.command(payload))
+                except garage_mod.GarageError as e:return self.reply(e.status,{'error':str(e)})
             if route=='/api/vueltas-config':
                 return self.reply(200,self.server.lap_config.write(payload))
             if route=='/api/scx/simular':
@@ -283,6 +299,55 @@ def _sesiones_terminadas(server):
                     p=gpo.pilot(sl);rows.append((p['name'],handicap_mod.clase_de(h,gpo.car_of(run,sl)),min(laps) if laps else None,len(laps)))
                 out.append(('gp:%s:%s'%(g['id'],run['key']),('Torneo · ' if tq else 'Gran Premio · ')+run['label'],rows))
     return out
+GARAGE_LOCK=threading.Lock()
+def revisar_garage(server):
+    """Historial del Garage: al terminar una Práctica/Carrera o un Gran Premio/torneo, guarda por coche del Garage
+    su mejor vuelta REAL, vueltas y si ganó. Cada sesión una vez (data/garage.json «hechos»)."""
+    if not GARAGE_LOCK.acquire(blocking=False):return
+    try:
+        gar=server.garage;live=server.live;gpo=server.gp
+        with live.lock:
+            s=live.session
+            s=copy.deepcopy(s) if s and s.get('phase')=='ended' and s.get('id') and not gar.ya('live:'+s['id']) else None
+        if s and s.get('phase')=='ended' and s.get('id') and not gar.ya('live:'+s['id']):
+            h=s.get('handicap');coches={};hs={};gid={}
+            for p in s['pilots']:
+                car=p.get('car') or live.car_of_slot(p['slot']);g=handicap_mod.garage_de(h,car)
+                hs[p['slot']]=handicap_mod.seg_de(h,car,p.get('nivel'))
+                if not g:continue
+                laps=[l['s'] for l in p.get('laps') or [] if isinstance(l.get('s'),(int,float))]
+                gid[p['slot']]=g['id'];x=coches.setdefault(g['id'],{'best':None,'vueltas':0,'gano':False,'piloto':p['name']})
+                if laps:x['best']=min(laps) if x['best'] is None else min(x['best'],min(laps));x['vueltas']+=len(laps)
+            if s.get('type')=='race':
+                for pos,p in live.standings(s,hs):
+                    if pos==1 and p['slot'] in gid:coches[gid[p['slot']]]['gano']=True
+            gar.registrar('live:'+s['id'],{'tipo':'carrera' if s.get('type')=='race' else 'practica','at':s.get('created_at'),
+                          'fuente':('Carrera' if s.get('type')=='race' else 'Práctica')+time.strftime(' %d/%m %H:%M',time.localtime(s.get('created_at') or time.time())),'coches':coches})
+        with gpo.lock:
+            g=gpo.gp
+            g=copy.deepcopy(g) if g and g.get('status')=='done' and not gar.ya('gp:'+g['id']) else None
+        if g and g.get('status')=='done' and not gar.ya('gp:'+g['id']):
+            snap=(gpo.snapshot() or {}).get('gp') or {}
+            with gpo.lock:
+                h=gpo.handicap();coches={};tq=gpo.es_torneo()
+                for run in g['runs']:
+                    if run['phase']!='done' or run.get('skipped'):continue
+                    for sl in run.get('participants') or []:
+                        d=run['data'].get(str(sl))
+                        if not isinstance(d,dict):continue
+                        gg=handicap_mod.garage_de(h,gpo.car_of(run,sl))
+                        if not gg:continue
+                        laps=[l['s'] for l in d.get('laps') or [] if l.get('valid')]
+                        x=coches.setdefault(gg['id'],{'best':None,'vueltas':0,'gano':False,'piloto':gpo.pilot(sl)['name']})
+                        if laps:x['best']=min(laps) if x['best'] is None else min(x['best'],min(laps));x['vueltas']+=len(laps)
+                for r in snap.get('final') or []:
+                    if r.get('pos')==1:
+                        gg=handicap_mod.garage_de(h,r.get('car'))
+                        if gg and gg['id'] in coches:coches[gg['id']]['gano']=True
+            gar.registrar('gp:'+g['id'],{'tipo':'torneo' if tq else 'gp','at':g.get('created_at'),'fuente':('Torneo' if tq else 'Gran Premio')+time.strftime(' %d/%m %H:%M',time.localtime(g.get('created_at') or time.time())),'coches':coches})
+    except Exception as e:
+        print('Garage: no se pudo revisar el historial:',e,flush=True)
+    finally:GARAGE_LOCK.release()
 def revisar_niveles(server):
     """Al terminar una Práctica/Carrera o cada parte del Gran Premio/torneo: con la mejor vuelta REAL (sin handicap)
     de cada piloto y la clase de su coche, sugiere (o cambia, en modo «Cambiar solo») su nivel. Cada sesión una vez."""
@@ -341,7 +406,9 @@ def wire(server):
     gp.min_lap=server.lap_config.min_lap
     gp.set_min_lap=lambda v:server.lap_config.write({'min_lap_s':v})
     # Handicap (ajuste de tiempo por vuelta por clase de coche): también en data/vueltas.json, uno para todo.
-    gp.handicap_actual=server.lap_config.handicap
+    # + Garage: la clase del mando la pone el coche del Garage que está en pista, más su hándicap propio.
+    hc_efectivo=lambda:garage_mod.efectivo(server.lap_config.handicap(),server.garage.read())
+    gp.handicap_actual=hc_efectivo;live.current_handicap=hc_efectivo
     # Bandera amarilla del piloto: triple clic del botón de cambio de carril (la tarjeta SCX solo se escucha).
     # Una sola configuración (Gran Premio → Configuración) para GP, Práctica y Carrera.
     flag_cfg=lambda:gp_flag_config(gp.gp['config'] if gp.gp and gp.gp.get('status')=='active' else gp.config)
@@ -383,6 +450,8 @@ def build_server(host,port,data,esp32_url,scx_port=None,scx_baud=57600,simulate=
         # UN SOLO lector SCX (solo lectura) para todo: Gran Premio y Práctica/Carrera.
         server.scx=SCX(port=scx_port,baud=scx_baud,simulate=simulate)
         server.gp=GrandPrix(data,server.scx,server.live)
+        # 🏎️ Garage: coches físicos con su ficha y su propio hándicap (data/garage.json + data/garage-fotos/).
+        server.garage=garage_mod.Garage(Path(data),server.avisos)
         # Torneo por mangas: pilotos inscritos con su nivel (data/inscritos.json).
         server.inscritos=torneo_mod.Inscritos(Path(data));server.avisos.extend(server.inscritos.avisos)
         # Nivel automático por tiempo: sesiones ya revisadas (para no sugerir dos veces lo mismo).

@@ -122,7 +122,7 @@ function renderSetup(force){
   if(!roster)return;
   if(!pickInit){roster.slots.forEach((p,i)=>{if(p)picked.add(i);carPick[i]=c.cars?.[String(i)]||i+1;});pickInit=true;}
   const box=$('pilotPick');
-  const hsig=String(roster.version)+'|'+JSON.stringify(hcCfg());
+  const hsig=String(roster.version)+'|'+JSON.stringify(hcCfg())+'|'+((PeluGarage.data||{}).version)+'|'+JSON.stringify(carPick);
   if((force||box.dataset.v!==hsig)&&!box.contains(document.activeElement)){box.dataset.v=hsig;box.replaceChildren();
     roster.slots.forEach((p,i)=>{if(!p)return;const card=el('label','pick'+(picked.has(i)?' on':''));card.style.setProperty('--team',COLORS[i]);
       const cb=el('input');cb.type='checkbox';cb.checked=picked.has(i);cb.addEventListener('change',()=>{cb.checked?picked.add(i):picked.delete(i);card.classList.toggle('on',cb.checked);});
@@ -131,8 +131,9 @@ function renderSetup(force){
       // Handicap: clase del coche elegido (se guarda al momento en la Mac).
       const hsel=el('select','hc-class');hsel.setAttribute('aria-label','Clase del coche de '+p.name);const hh=hcCfg();
       PeluHandicap.CLASES.forEach(([k,n])=>{const o=el('option','',PeluHandicap.ICON[k]+' '+n+(hh.enabled?' · '+PeluHandicap.segTxt(hh.seg[k]):''));o.value=k;hsel.append(o);});
-      const syncH=()=>{hsel.value=hcCfg().clases?.[String(carPick[i])]||'sin_iman';};syncH();
-      sel.addEventListener('change',()=>{carPick[i]=Number(sel.value);syncH();});
+      // 🏎️ Garage: si el mando tiene un coche del Garage en pista, la clase la pone el coche.
+      const syncH=()=>{const gc=PeluGarage.on(carPick[i]);hsel.value=gc?gc.clase:(hcCfg().clases?.[String(carPick[i])]||'sin_iman');hsel.disabled=!!gc;hsel.title=gc?'La clase la pone el coche del Garage: '+gc.nombre:'';};syncH();
+      sel.addEventListener('change',()=>{carPick[i]=Number(sel.value);renderSetup(true);});
       hsel.addEventListener('click',e=>e.preventDefault&&e.stopPropagation());
       hsel.addEventListener('change',async()=>{const c={};c[String(carPick[i])]=hsel.value;try{await saveHandicap({clases:c});toast('Coche '+carPick[i]+': '+PeluHandicap.NOMBRE[hsel.value]);}catch(e){toast(e.message);syncH();}});
       // Nivel del piloto (se guarda en el registro): suma o resta por vuelta además de la clase del coche.
@@ -141,6 +142,7 @@ function renderSetup(force){
       nsel.addEventListener('click',e=>e.preventDefault&&e.stopPropagation());
       nsel.addEventListener('change',()=>setNivel(i,nsel.value));
       const sels=el('span','pick-sel');sels.append(sel,hsel,nsel);
+      if(PeluGarage.cars().length){const gs=PeluGarage.select(carPick[i],m=>{carPick[i]=m;renderSetup(true);},m=>toast(m));gs.addEventListener('click',e=>e.preventDefault&&e.stopPropagation());sels.append(gs);}
       if(p.sugerido&&p.sugerido.nivel!==nv){const sg=el('small','pick-sug');sg.append(document.createTextNode('Sugerido: '+PeluHandicap.NIVEL_ICON[p.sugerido.nivel]+' '+PeluHandicap.nivelTxt(p.sugerido.nivel)+' ('+Number(p.sugerido.s).toFixed(2)+' s) '));
         const ok=el('button','chip-button','Aceptar');ok.type='button';ok.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();setNivel(i,p.sugerido.nivel);});sg.append(ok);name.append(sg);}
       card.append(cb,img,name,sels);box.append(card);});
@@ -190,7 +192,7 @@ function cardFor(slot){
   if(!card){
     const p=state.gp.pilots.find(x=>x.slot===slot);card=el('article','gcard');card.dataset.slot=slot;card.dataset.hon=String(hon);card.dataset.car=pcar;card.style.setProperty('--team',COLORS[teamIdx(slot)]);
     const top=el('div','gtop');const pos=el('div','gpos','—');const img=el('img','gav');img.src=p.avatar;img.alt='';
-    const nm=el('div','gname'),pide=el('span','pide sin','⇄');pide.dataset.car=p.car;pide.setAttribute('role','status');const fl=el('span','gflags');fl.title='Banderas amarillas que pidió en esta parte (triple clic en su botón de cambio de carril)';const hcl=el('span','hclase',hon&&p.clase?PeluHandicap.detalle(p):'');hcl.hidden=!(hon&&p.clase);nm.append(el('strong','',p.name),el('small','','Coche '+p.car+' · '+TEAM[teamIdx(slot)]+(p.nivel?' · '+PeluHandicap.NIVEL_ICON[p.nivel]+' '+PeluHandicap.nivelTxt(p.nivel):'')),hcl,pide,fl);
+    const nm=el('div','gname'),pide=el('span','pide sin','⇄');pide.dataset.car=p.car;pide.setAttribute('role','status');const fl=el('span','gflags');fl.title='Banderas amarillas que pidió en esta parte (triple clic en su botón de cambio de carril)';const hcl=el('span','hclase',hon&&p.clase?PeluHandicap.detalle(p):'');hcl.hidden=!(hon&&p.clase);nm.append(el('strong','',p.name),el('small','','Coche '+p.car+' · '+TEAM[teamIdx(slot)]+(p.nivel?' · '+PeluHandicap.NIVEL_ICON[p.nivel]+' '+PeluHandicap.nivelTxt(p.nivel):'')+(p.coche_nombre?' · 🏎️ '+p.coche_nombre:'')),hcl,pide,fl);
     const badge=el('span','gbadge');top.append(pos,img,nm,badge);
     const cv=el('canvas','gcanvas');const stats=el('div','gstats');
     [['Vueltas','laps'],['Última','last'],['Mejor','best']].forEach(([l,k])=>{const b=el('div');b.append(el('span','',l),el('strong','','—'));b.dataset.k=k;if(k!=='laps'){const real=el('small','greal');real.hidden=true;const kmh=el('small','gkmh');kmh.hidden=true;b.append(real,kmh);}stats.append(b);});
@@ -348,6 +350,8 @@ async function poll(){
   finally{clearTimeout(to);polling=false;}
 }
 async function setNivel(i,nivel){try{await post('/api/slot',{slot:i,action:'nivel',nivel});toast('Nivel de '+(roster.slots[i]||{}).name+': '+PeluHandicap.nivelTxt(nivel));await pollRoster();renderSetup(true);}catch(e){toast(e.message);}}
+// 🏎️ Garage: coches en pista por mando (Nuevo Gran Premio y Torneo los muestran).
+PeluGarage.onChange(()=>{if(state&&screenName==='setup')renderSetup(true);});PeluGarage.start(5000);
 async function pollRoster(){try{const r=await fetch('/api/roster',{cache:'no-store'});if(r.ok){roster=await r.json();if(state&&screenName==='setup')renderSetup(false);}}catch(e){}}
 syncSoundButton();pollRoster().then(poll);setInterval(poll,250);setInterval(pollRoster,3000);
 window.PELU_GP={get state(){return state;}};

@@ -1,0 +1,72 @@
+/* 🏎️ Garage · mismo estilo oscuro de la app; primero para iPhone vertical. */
+.garage-page main{padding-bottom:60px}
+.gar-pista{margin-top:22px}
+.gar-pista-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.gar-mando{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-left:5px solid var(--team);border-radius:12px;padding:10px;background:var(--panel);min-width:0}
+.gar-mando-n{flex:0 0 auto;width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font:900 20px system-ui;background:var(--team);color:#11150b}
+.gar-mando-t{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
+.gar-mando-t small{color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.1em;font-size:11px}
+.gar-mando-sub{font-size:12px;color:#cfd6e0}
+.gar-sel{font:15px system-ui;background:#0b0d11;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:9px;max-width:100%;min-width:0;width:100%}
+.gar-toolbar{flex-wrap:wrap}
+.gar-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.gar-card{border:1px solid var(--line);border-top:5px solid var(--car);border-radius:15px;overflow:hidden;background:var(--panel);display:flex;flex-direction:column;min-width:0}
+.gar-img{position:relative;aspect-ratio:16/10;background:radial-gradient(110% 90% at 30% 20%,color-mix(in srgb,var(--car) 45%,#10141b),#0d1016);display:flex;align-items:center;justify-content:center}
+.gar-img img{width:100%;height:100%;object-fit:cover;display:block}
+.gar-noimg{font-size:64px;line-height:1;display:flex;flex-direction:column;align-items:center;gap:6px}
+.gar-noimg small{font-size:13px;color:var(--muted)}
+.gar-badges{position:absolute;left:8px;top:8px;right:8px;display:flex;flex-wrap:wrap;gap:6px}
+.gar-badge{font:900 11px system-ui;letter-spacing:.06em;padding:5px 8px;border-radius:6px;background:#0b0d11d9;color:#fff;border:1px solid #ffffff33}
+.gar-badge.pista{background:#d5ff42;color:#11150b;border-color:#d5ff42}.gar-badge.ej{background:#ffb02e;color:#1a1200;border-color:#ffb02e}
+.gar-body{padding:14px 16px 16px;display:flex;flex-direction:column;gap:9px;flex:1}
+.gar-body h3{margin:0;font-size:22px;letter-spacing:-.02em;overflow-wrap:anywhere}
+.gar-sub{margin:0;color:var(--muted);font-size:14px;display:flex;align-items:center;gap:7px}
+.gar-dot{width:12px;height:12px;border-radius:50%;border:1px solid #ffffff55;flex:0 0 auto}
+.gar-hc{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.gar-pill{font:800 13px system-ui;padding:5px 9px;border-radius:7px;background:#ffe23b22;color:#ffe9a0}
+.gar-pill.own{background:#2a3140;color:#dfe5ee}.gar-pill.own.pos{background:#50dc9222;color:#7ff0b4}.gar-pill.own.neg{background:#3d96ff26;color:#9cc8ff}
+.gar-tot{font-size:14px}
+.gar-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:0}
+.gar-stats div{background:#10141b;border:1px solid var(--line);border-radius:9px;padding:7px 8px;min-width:0}
+.gar-stats dt{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-weight:800}
+.gar-stats dd{margin:2px 0 0;font:800 17px ui-monospace,SFMono-Regular,Menlo,monospace}
+.gar-last,.gar-extra,.gar-nota{margin:0;font-size:13px;color:#cfd6e0;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.gar-techo{display:inline-flex;align-items:center;gap:4px;color:var(--muted)}.gar-techo i{width:14px;height:14px;border-radius:3px;border:1px solid #ffffff66;display:inline-block}
+.gar-nota{color:#f5d77a}
+.gar-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto;padding-top:4px}.gar-btns button{flex:1;min-height:46px}
+.gar-empty{grid-column:1/-1;border:1px dashed var(--line);border-radius:14px;padding:28px;text-align:center}
+.gar-empty strong{font-size:20px}
+/* Editor */
+.gar-modal{--team:var(--lime);width:min(960px,100%)}
+.gar-ed{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:22px}
+.gar-photo-box{aspect-ratio:16/10;border-radius:12px;overflow:hidden;background:#0b0d11;border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
+.gar-photo-box img{width:100%;height:100%;object-fit:cover}.gar-photo-box img[hidden],.gar-noimg[hidden]{display:none}
+.gar-photo-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.gar-photo-btns>*{flex:1;min-height:46px}.gar-photo-btns button[hidden]{display:none}
+.gar-fields{display:flex;flex-direction:column;gap:10px;min-width:0}
+.gar-fields label{display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:700}
+.gar-fields input:not([type=checkbox]):not([type=color]),.gar-fields select,.gar-nota-add input{font:16px system-ui;background:#0b0d11;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:11px;min-width:0;width:100%}
+.gar-fields input[type=color]{width:100%;height:46px;border:1px solid var(--line);border-radius:8px;background:#0b0d11;padding:3px}
+.gar-fields input[type=color]:disabled{opacity:.35}
+.gar-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.gar-check{flex-direction:row!important;align-items:center;gap:8px!important;font-weight:600!important}.gar-check input{width:22px;height:22px}
+.gar-fields .help{margin:-4px 0 0}
+.gar-fields details{border:1px solid var(--line);border-radius:10px;padding:10px 12px}.gar-fields details[open]{display:flex;flex-direction:column;gap:10px}
+.gar-fields summary{cursor:pointer;font-weight:800}
+.gar-notas{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0;min-width:0}.gar-notas legend{font-weight:800;padding:0 6px}
+.gar-notas ul{list-style:none;margin:0 0 10px;padding:0;display:flex;flex-direction:column;gap:6px}
+.gar-notas li{display:flex;gap:8px;align-items:center;background:#10141b;border-radius:8px;padding:6px 8px;font-size:14px}
+.gar-nf{color:var(--muted);flex:0 0 auto;font-variant-numeric:tabular-nums}.gar-nt{flex:1;overflow-wrap:anywhere}.gar-nx{padding:6px 10px;min-height:36px}
+.gar-nota-add{display:grid;grid-template-columns:auto 1fr auto;gap:8px}.gar-nota-add input[type=date]{width:auto}
+.gar-actions{display:flex;gap:10px;align-items:center;margin-top:16px;flex-wrap:wrap}.gar-sp{flex:1}
+.gar-actions button{min-height:48px}.gar-danger{border-color:#ff6b6b88!important;color:#ff9b9b}.gar-danger[hidden]{display:none}
+body.modal-open{overflow:hidden}
+@media(max-width:900px){.gar-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.gar-pista-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){
+  .gar-grid,.gar-pista-grid{grid-template-columns:1fr}
+  .gar-ed{grid-template-columns:1fr}
+  .garage-page main{padding:18px 14px 60px}
+  .gar-modal{padding:16px}
+  .gar-stats dd{font-size:15px}
+  .gar-nota-add{grid-template-columns:1fr 1fr}.gar-nota-add input[type=date]{width:100%}.gar-nota-add input:not([type=date]){grid-column:1/-1;order:-1}
+  .gar-actions .gar-sp{display:none}.gar-actions button{flex:1 1 40%}
+}

@@ -105,7 +105,12 @@ function renderPilot(p,d){
   const img=$('meAvatar'),src=avatarSrc(p.avatar);if(img.getAttribute('src')!==src){img.src=src;img.alt='Avatar de '+p.name;}
   setText($('meName'),p.name);
   const nvt=!p.torneo&&p.nivel_txt?' · '+p.nivel_txt:'';
-  setText($('meCar'),(d?(d.por_turnos?'Equipo '+p.color_name+' · por turnos':'Coche '+d.car+' · '+p.color_name):p.color_name)+nvt);
+  setText($('meCar'),(d?(d.por_turnos?'Equipo '+p.color_name+' · por turnos':'Coche '+d.car+' · '+p.color_name):p.color_name)+nvt+(d&&d.coche_nombre?' · 🏎️ '+d.coche_nombre:''));
+  // 🏎️ Coche del Garage con el que corre (foto, clase y su hándicap propio).
+  const gb=$('meGarage');if(gb){const gc=d&&d.garage_id?PeluGarage.cars().find(c=>c.id===d.garage_id):null,nm=d&&d.coche_nombre;
+    gb.hidden=!nm;if(nm){setText($('meGarNombre'),nm);
+      const f=$('meGarFoto'),sw=$('meGarSw');const src=gc&&gc.foto?gc.foto:'';if(f.getAttribute('src')!==src){if(src)f.src=src;else f.removeAttribute('src');}f.hidden=!src;sw.hidden=!!src;if(gc)sw.style.background=gc.color||'#444';
+      setText($('meGarInfo'),gc?[gc.escuderia,PeluHandicap.ICON[gc.clase]+' '+PeluHandicap.NOMBRE[gc.clase],'hándicap propio '+PeluHandicap.segTxt(gc.h),gc.chip?'chip '+gc.chip:''].filter(Boolean).join(' · '):'');}}
   // Nivel sugerido por sus tiempos (se acepta en la pantalla grande: Menú → Pilotos).
   const sg=$('meSug');if(sg){const x=p.sugerido&&p.sugerido.nivel!==p.nivel?p.sugerido:null,c=!x&&p.nivel_cambio;
     const t=x?'Nivel sugerido: '+PeluHandicap.nivelTxt(x.nivel)+' (mejor vuelta '+Number(x.s).toFixed(2)+' s). Se acepta en la pantalla grande, Menú → Pilotos.':c?'Tu nivel cambió: '+PeluHandicap.nivelTxt(c.de)+' → '+PeluHandicap.nivelTxt(c.nivel)+' (mejor vuelta '+Number(c.s).toFixed(2)+' s).':'';
@@ -292,5 +297,6 @@ async function boot(){
 // Registro: se refresca de vez en cuando (avatar nuevo, piloto agregado) mientras se elige.
 setInterval(async()=>{if(screen==='choose'){try{await loadRoster();online();renderChooser($('chooseNote').hidden?null:$('chooseNote').textContent);}catch(e){rosterFails++;offline(rosterFails+2);}}},3000);
 boot();
+PeluGarage.start(10000);   // foto y ficha del coche del Garage (cada 10 s; casi nunca cambia)
 window.MI_COCHE={get state(){return state;},get choice(){return choice;},get screen(){return screen;}};
 })();

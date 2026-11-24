@@ -730,8 +730,9 @@ class Live:
                 if not s or s['id']!=payload.get('id') or s['phase']=='ended':raise LiveError('La sesión cambió. Actualiza la pantalla.',409)
                 if s['phase']=='ready':
                     secs=self.lights_seconds()
-                    s['handicap']=self.current_handicap()   # el handicap queda fijo al apretar Empezar
-                    for p in s['pilots']:   # y el nivel de cada piloto (registro de pilotos), también
+                    s['handicap']=self.current_handicap()   # el handicap queda fijo al apretar Empezar (con los coches del Garage)
+                    for p in s['pilots']:   # y el nivel de cada piloto (registro de pilotos), también, y su mando
+                        p['car']=self.car_of_slot(p['slot'])
                         r=roster['slots'][p['slot']] if 0<=p['slot']<len(roster['slots']) else None
                         if r and r.get('name')==p['name']:p['nivel']=handicap_mod.nivel_ok(r.get('nivel'))
                     s.update(phase='countdown',starts_at=time.time()+secs,countdown_total=secs,control=s['control']+1,version=s['version']+1,notice='¡Semáforo! Nadie arranca antes del verde.')

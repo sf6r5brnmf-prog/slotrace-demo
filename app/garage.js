@@ -24,7 +24,7 @@ function renderPista(){
   sl.forEach((p,i)=>{if(!p)return;const r=el('div','gar-mando');r.style.setProperty('--team',COLORS[i]);
     const c=G.uso(i);r.append(el('b','gar-mando-n',(p.name||'?').slice(0,1).toUpperCase()));
     const t=el('div','gar-mando-t');t.append(el('small','',p.name));
-    t.append(el('span','gar-mando-sub',c?H.ICON[c.clase]+' '+H.NOMBRE[c.clase]+' '+H.segTxt(segClase(c.clase))+' · coche '+H.segTxt(c.h)+' = '+H.segTxt(Math.round((segClase(c.clase)+c.h)*100)/100)+((c.tipo==='invitado')?' · 🧳 invitado':''):'Sin coche del Garage: como antes'));
+    t.append(el('span','gar-mando-sub',c?H.ICON[c.clase]+' '+H.NOMBRE[c.clase]+' '+H.segTxt(segClase(c.clase))+' · coche '+H.segTxt(c.h)+' = '+H.segTxt(Math.round((segClase(c.clase)+c.h)*100)/100)+((c.tipo==='invitado')?' · 🧳 invitado':''):(k=>'Sin ficha · '+H.ICON[k]+' '+H.NOMBRE[k]+' '+H.segTxt(segClase(k)))(G.claseDe(i))));
     t.append(G.pilot(i,p.name,nombres(),null,msg));r.append(t);box.append(r);});
 }
 // ---------- Tarjetas ----------

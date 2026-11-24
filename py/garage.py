@@ -97,12 +97,27 @@ def limpiar_coche(c, prev=None):
     return out
 
 
-def entradas(g, mapa):
-    """{'p<slot>': ficha} para handicap.con_pilotos: mapa = {slot: id del coche}. Los ids que ya no existen se ignoran."""
+CLASE_SIN = re.compile(r'^clase:(sin_iman|con_iman|modificado)$')
+
+
+def valor_ok(v):
+    """Lo que un piloto puede llevar: '' (nada), id de un coche del Garage o 'clase:<clase>' (coche sin ficha)."""
+    return v == '' or (isinstance(v, str) and (bool(ID.match(v)) or bool(CLASE_SIN.match(v))))
+
+
+def entradas(g, mapa, slots=None):
+    """{'p<slot>': ficha} para handicap.con_pilotos: mapa = {slot: id del coche o 'clase:<clase>'}.
+    La clase (imán o no) es del COCHE: sin coche del Garage, la clase se escoge al vincular ('clase:…');
+    si no escogió nada, Sin imán. Nunca sale del piloto ni del mando (la clase vieja por mando se ignora).
+    slots: lugares que corren (cada uno lleva entrada aunque no haya escogido nada)."""
     cars = {c['id']: c for c in (g or {}).get('cars') or []}; out = {}
-    for slot, cid in (mapa or {}).items():
-        c = cars.get(cid)
+    mapa = {str(k): v for k, v in (mapa or {}).items()}
+    for slot in (list(mapa) if slots is None else [str(s) for s in slots]):
+        v = mapa.get(slot) or ''; c = cars.get(v)
         if c: out['p%s' % slot] = {'id': c['id'], 'nombre': c['nombre'], 'clase': c['clase'], 'h': c.get('h') or 0.0, 'tipo': c.get('tipo') or 'casa'}
+        else:
+            m = CLASE_SIN.match(v) if isinstance(v, str) else None
+            out['p%s' % slot] = {'id': '', 'nombre': '', 'clase': m.group(1) if m else 'sin_iman', 'h': 0.0, 'tipo': 'sin'}
     return out
 
 
@@ -145,7 +160,8 @@ class Garage:
     def _limpiar_pista(self):
         ids = {c['id'] for c in self.data['cars']}; u = {}
         for k, cid in (self.data.get('uso') or {}).items():
-            if cid in ids and cid not in u.values(): u[str(k)] = cid   # un coche lo lleva un solo piloto a la vez
+            if isinstance(cid, str) and CLASE_SIN.match(cid): u[str(k)] = cid   # coche sin ficha: solo su clase
+            elif cid in ids and cid not in u.values(): u[str(k)] = cid   # un coche lo lleva un solo piloto a la vez
         self.data['uso'] = u
     def _usar(self, slot, cid, nombres=None):
         try: slot = int(slot)
@@ -153,6 +169,7 @@ class Garage:
         if not 0 <= slot <= 5: raise GarageError('Piloto inválido.')
         u = self.data.setdefault('uso', {})
         if not cid: u.pop(str(slot), None); return
+        if isinstance(cid, str) and CLASE_SIN.match(cid): u[str(slot)] = cid; return
         c = self._find(cid)
         if not c: raise GarageError('Ese coche ya no está en el Garage.', 404)
         otro = next((k for k, v in u.items() if v == cid and k != str(slot)), None)

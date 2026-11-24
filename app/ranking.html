@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="es-MX"><head><script src="demo-shim.js?v=202611241340"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ranking de pilotos · Puto el último</title><link rel="stylesheet" href="style.css?v=20261124rk"><link rel="stylesheet" href="gp.css?v=20261124rk"><link rel="stylesheet" href="garage.css?v=20261124rk"><script src="handicap.js?v=20261124rk" defer></script><script src="ranking.js?v=20261124rk" defer></script></head>
+<body class="gp-page ranking-page"><main>
+<header class="gp-header"><div><p class="eyebrow">SLOTRACE / RANKING</p><h1>🏆 Ranking de pilotos</h1><p class="subtitle">Por clase de coche. La mejor vuelta de cada piloto en todo su historial.</p></div>
+<div class="gp-status"><a class="link-button" href="index.html">← Menú</a><a class="link-button" href="garage.html">🏎️ Garage</a><a class="link-button" href="gp.html">🏁 Gran Premio</a><span id="connection" class="chip">Conectando…</span></div></header>
+<p class="rk-real" id="rkReal">⏱️ Tiempos reales, sin hándicap</p>
+<p class="muted rk-nota">El hándicap (clase, coche y nivel) solo cambia el resultado de cada carrera. Aquí y para subir o bajar de nivel cuenta la vuelta <b>real</b> más rápida. Una sesión cuenta si el piloto dio <b id="rkMin">3</b> vueltas o más.</p>
+<nav class="gar-tabs rk-tabs" role="tablist" aria-label="Clases" id="rkTabs"></nav>
+<p class="rk-cortes" id="rkCortes"></p>
+<ol id="rkList" class="rk-list" aria-live="polite"></ol>
+<details class="rk-ajustes" id="rkAjustes"><summary>⚙️ Cambio de nivel automático y tiempos de corte</summary><p class="muted" id="rkModo"></p><div id="rkNivel" class="hc-nivel"></div><p id="rkMsg" class="error" role="alert"></p></details>
+</main></body></html>

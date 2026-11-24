@@ -15,7 +15,7 @@ function render(){
     else{const art=element('div','empty-art');art.append(element('strong','','+'),element('span','','Tu lugar en la parrilla'));card.append(art);}
     const bottom=element('div','card-bottom'),btn=element('button','',pilot?'Editar':'Agregar');btn.type='button';btn.addEventListener('click',()=>openEditor(i));
     bottom.append(element('h2','',pilot?pilot.name:'Lugar libre'),btn);card.append(bottom);
-    if(pilot)card.append(nivelBox(pilot,i));
+    if(pilot)card.append(nivelBox(pilot,i),mejoresBox((roster.mejores||[])[i]||{}));
     board.append(card);
   });
   syncMenuRoster();
@@ -33,6 +33,15 @@ function nivelBox(p,i){
     const no=element('button','small','OK');no.type='button';no.addEventListener('click',()=>setNivel(i,null));s.append(no);box.append(s);}
   return box;
 }
+// 🏆 Su mejor vuelta REAL por clase de coche (sin hándicap): es lo que cuenta para el ranking y su nivel.
+function mejoresBox(m){
+  const box=element('a','mejores-box');box.href='ranking.html';box.title='Ver el ranking (tiempos reales, sin hándicap)';
+  const ks=PeluHandicap.CLASES.map(([k])=>k).filter(k=>m[k]!=null);
+  box.append(element('span','mj-t','🏆 Mejor vuelta real'));
+  if(!ks.length)box.append(element('span','mj-v none','Sin tiempos todavía'));
+  ks.forEach(k=>box.append(element('span','mj-v',PeluHandicap.ICON[k]+' '+PeluHandicap.NOMBRE[k]+' '+Number(m[k]).toFixed(2)+' s')));
+  return box;
+}
 async function setNivel(i,nivel){
   try{const r=await fetch('/api/slot',{method:'POST',headers:{'Content-Type':'application/json','X-Roster':'1'},body:JSON.stringify(nivel?{slot:i,action:'nivel',nivel}:{slot:i,action:'nivel_descartar'})});
     const d=await r.json();if(!r.ok)throw Error(d.error||'No se pudo guardar.');await poll();if(nivel)notify('Nivel guardado: '+PeluHandicap.nivelTxt(nivel)+'.');}
@@ -45,7 +54,8 @@ async function poll(){
   try{
     const r=await fetch('/api/roster',{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);const data=await r.json();
     rosterFails=0;$('connection').textContent='● Compartido en vivo';$('connection').className='chip connection live ok';roster=data;
-    if(lastVersion!==data.version){try{render();lastVersion=data.version;}catch(e){reportRenderError(e);}}
+    const ver=data.version+'|'+(data.ranking_v||0);
+    if(lastVersion!==ver){try{render();lastVersion=ver;}catch(e){reportRenderError(e);}}
   }catch(e){rosterFails++;$('connection').textContent=PeluAvisos.offlineText(rosterFails);$('connection').className='chip connection offline bad';}
   finally{polling=false;}
 }
@@ -584,14 +594,11 @@ function renderLapConfig(force=false){
     const sel=element('select');sel.setAttribute('aria-label','Coche de '+p.name);
     for(let c=1;c<=6;c++){const o=element('option','','Coche '+c);o.value=String(c);sel.append(o);}
     sel.value=String(carFor(i));sel.addEventListener('change',()=>setCar(i,Number(sel.value)));
-    // Handicap: clase del coche (se queda con el coche si los pilotos se cambian de coche).
-    const hc=element('select','hc-class');hc.setAttribute('aria-label','Clase del coche de '+p.name);
-    PeluHandicap.CLASES.forEach(([k,n])=>{const o=element('option','',PeluHandicap.ICON[k]+' '+n+' · '+PeluHandicap.segTxt(hcCfg().seg[k]));o.value=k;hc.append(o);});
-    hc.value=hcCfg().clases[String(carFor(i))]||'sin_iman';hc.addEventListener('change',()=>setClase(carFor(i),hc.value));
-    // 🏎️ Garage: si el piloto lleva un coche del Garage, la clase la pone SU coche (y suma su hándicap propio), en el mando que sea.
-    const gc=PeluGarage.uso(i);if(gc){hc.value=gc.clase;hc.disabled=true;hc.title='La clase la pone el coche del Garage: '+gc.nombre;}
-    const sels=element('span','car-selects');sels.append(sel,hc);
-    sels.append(PeluGarage.pilot(i,p.name,rosterNames(),()=>renderLapConfig(true),m=>{$('lapConfigError').textContent=m;}));
+    // La clase (imán o no) y el hándicap son del COCHE que lleva en esta carrera (Garage o «sin ficha»), nunca del piloto.
+    const k=PeluGarage.claseDe(i),gc=PeluGarage.uso(i);
+    const hc=element('span','hc-chip',PeluHandicap.ICON[k]+' '+PeluHandicap.NOMBRE[k]+' · '+PeluHandicap.segTxt(hcCfg().seg[k]));hc.title=gc?'La clase la pone el coche del Garage: '+gc.nombre:'Coche sin ficha: escoge su clase en la lista de coches';
+    const sels=element('span','car-selects');sels.append(sel);
+    sels.append(PeluGarage.pilot(i,p.name,rosterNames(),()=>renderLapConfig(true),m=>{$('lapConfigError').textContent=m;}),hc);
     const nv=p.nivel||'intermedio';row.append(element('span','',p.name+' · '+PeluHandicap.NIVEL_ICON[nv]+' '+PeluHandicap.nivelTxt(nv)),sels);target.append(row);
   });
   renderHandicapConfig();
@@ -618,7 +625,6 @@ function renderHandicapConfig(){
     if(nb.dataset.sig!==sig){nb.dataset.sig=sig;PeluHandicap.nivelSettings(nb,h,saveHandicap,m=>{$('lapConfigError').textContent=m;});}nb.classList.toggle('off',!h.enabled);}
 }
 function saveHandicap(part){if(!lapConfig)return;saveLapConfig({source:lapConfig.source,cars:lapConfig.cars.slice(),handicap:part});}
-function setClase(car,clase){const c={};c[String(car)]=clase;saveHandicap({clases:c});}
 $('hcEnabled').addEventListener('change',()=>saveHandicap({enabled:$('hcEnabled').checked}));
 // Cada clase: botón + / − (suma o resta) y el número; el teclado del iPhone no tiene signo menos.
 PeluHandicap.CLASES.forEach(([k])=>PeluHandicap.upgrade($('hcSeg_'+k),v=>{

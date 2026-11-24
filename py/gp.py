@@ -299,7 +299,7 @@ class GrandPrix(torneo_mod.TorneoMixin):
                     g['handicap'] = self.handicap(); g['handicap_fijo'] = True
                 # El coche del Garage de cada piloto queda fijo en cada parte (en el torneo se puede cambiar entre mangas).
                 if self.es_torneo():
-                    ids = [self.pilot(x).get('garage_id') for x in run['participants'] or [] if self.pilot(x).get('garage_id')]
+                    ids = [self.pilot(x).get('garage_id') for x in run['participants'] or [] if garage_mod.ID.match(self.pilot(x).get('garage_id') or '')]
                     rep = next((x for x in ids if ids.count(x) > 1), None)
                     if rep:
                         quien = [self.pilot(x)['name'] for x in run['participants'] if self.pilot(x).get('garage_id') == rep]
@@ -744,9 +744,9 @@ class GrandPrix(torneo_mod.TorneoMixin):
         """{'p<slot>': ficha} del coche del Garage que lleva cada piloto (garage_id)."""
         g = self.gp; fn = getattr(self, 'garage_read', None)
         if not g or not fn: return {}
-        mapa = {p['slot']: p['garage_id'] for p in g['pilots'] if p.get('garage_id') and (slots is None or p['slot'] in slots)}
+        mapa = {p['slot']: p.get('garage_id') or '' for p in g['pilots'] if slots is None or p['slot'] in slots}
         if not mapa: return {}
-        try: return garage_mod.entradas(fn(), mapa)
+        try: return garage_mod.entradas(fn(), mapa, list(mapa))
         except Exception: return {}
     def handicap_run(self, run=None):
         """Handicap del GP + el coche del Garage de cada piloto (fijo en cada parte al arrancarla)."""
@@ -782,7 +782,7 @@ class GrandPrix(torneo_mod.TorneoMixin):
         if not g: return False
         # Torneo: todos los coches pasan por todos los pilotos; un solo criterio para todo el torneo (coches 1 a 6).
         h = self.handicap_run(run)
-        if self.es_torneo(): return handicap_mod.activo(h, list(range(1, 7)) + list(((h or {}).get('garage') or {}).keys()), [p.get('nivel') for p in g['pilots']])
+        if self.es_torneo(): return handicap_mod.activo(h, [self.hk(h, run, p['slot']) for p in g['pilots']], [p.get('nivel') for p in g['pilots']])
         slots = [p['slot'] for p in g['pilots']] if slots is None else slots
         return handicap_mod.activo(h, [self.hk(h, run, s) for s in slots], [self.nivel_of(s) for s in slots])
     def total(self, run, slot):

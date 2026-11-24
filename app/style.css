@@ -98,3 +98,9 @@
 .gq-f input:not([type=checkbox]),.gq-f select{font:16px system-ui;background:#0b0d11;border:1px solid var(--line);border-radius:8px;color:var(--text);padding:10px;min-width:0;width:100%}
 .gq-err{color:#ff8179;margin:0;min-height:1em;font-size:14px}.gq-btns{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}.gq-ok{background:var(--lime);color:#11150b;border-color:var(--lime)}
 .gar-sel optgroup{font-weight:800}
+/* 🏆 Mejor vuelta real por clase en la tarjeta del piloto + chip de clase del coche en «Coche de cada piloto» */
+.mejores-box{display:flex;flex-wrap:wrap;gap:4px 8px;padding:0 14px 12px;text-decoration:none;color:inherit;font:600 12px system-ui}
+.mejores-box .mj-t{width:100%;color:#f5c542;font-weight:800}
+.mejores-box .mj-v{padding:3px 8px;border-radius:99px;background:#ffffff14}
+.mejores-box .mj-v.none{opacity:.65}
+.hc-chip{display:inline-flex;align-items:center;padding:6px 10px;border-radius:10px;background:#ffffff12;font:700 13px system-ui;white-space:nowrap}

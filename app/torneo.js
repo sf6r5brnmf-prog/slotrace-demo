@@ -59,7 +59,7 @@ function renderSetup(force){
       const del=el('button','tq-del','✕');del.type='button';del.setAttribute('aria-label','Quitar a '+p.name);del.addEventListener('click',()=>{ins.pilotos.splice(i,1);saveIns();renderSetup(true);});
       li.append(el('b','tq-num',String(i+1)),nm,levelPicker(p.nivel,k=>{const q=ins.pilotos[i];if(q){q.nivel=k;delete q.sugerido;delete q.nivel_cambio;saveIns();}renderSetup(true);},true),del);
       // Su coche: puede repetirse entre pilotos de mangas distintas (en una misma manga, no).
-      const otros={};ins.pilotos.forEach((x,k)=>{if(k!==i&&x.garage_id)otros[x.garage_id]=(otros[x.garage_id]?otros[x.garage_id]+', ':'')+x.name;});
+      const otros={};ins.pilotos.forEach((x,k)=>{if(k!==i&&x.garage_id&&!x.garage_id.startsWith('clase:'))otros[x.garage_id]=(otros[x.garage_id]?otros[x.garage_id]+', ':'')+x.name;});
       const gp=PeluGarage.picker({cur:p.garage_id||'',usados:{},aria:'Coche de '+p.name,dueno:p.name,onError:m=>{$('tqError').textContent=m;},
         onPick:async id=>{const q=ins.pilotos[i];if(q){if(id)q.garage_id=id;else delete q.garage_id;saveIns();}},
         onNuevo:async datos=>{const d=await PeluGarage.post({action:'rapido',car:datos});const q=ins.pilotos[i];if(q){q.garage_id=d.saved;saveIns();}}});

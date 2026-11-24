@@ -14,6 +14,7 @@ import micoche
 import torneo as torneo_mod
 import handicap as handicap_mod
 import garage as garage_mod
+import ranking as ranking_mod
 
 ROOT = Path(__file__).resolve().parent
 COLORS = [('Blanco','#edf2f7'),('Amarillo','#ffe23b'),('Rojo','#ff4d50'),('Azul','#3d96ff'),('Verde','#50dc92'),('Naranja','#ff963d')]
@@ -147,16 +148,21 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/api/garage':
             revisar_garage(self.server)
             return self.reply(200,self.server.garage.view())
+        if path=='/api/ranking':
+            revisar_niveles(self.server)
+            return self.reply(200,vista_ranking(self.server))
         if path=='/api/roster':
             revisar_niveles(self.server)
             revisar_garage(self.server)
             with LOCK: d=self.server.store.read()
-            return self.reply(200,dict(d,colors=[{'name':n,'hex':h} for n,h in COLORS]))
+            # 🏆 mejor vuelta REAL (sin hándicap) de cada piloto por clase, para su tarjeta.
+            rk=self.server.ranking
+            return self.reply(200,dict(d,colors=[{'name':n,'hex':h} for n,h in COLORS],mejores=[rk.mejores(p['name']) if p else {} for p in d['slots']],ranking_v=rk.data['version']))
         assets={'/':('index.html','text/html; charset=utf-8'),'/app.js':('app.js','text/javascript; charset=utf-8'),'/style.css':('style.css','text/css; charset=utf-8'),
                 '/gp':('gp.html','text/html; charset=utf-8'),'/avisos.js':('avisos.js','text/javascript; charset=utf-8'),'/gp.js':('gp.js','text/javascript; charset=utf-8'),'/gauges.js':('gauges.js','text/javascript; charset=utf-8'),'/lights.js':('lights.js','text/javascript; charset=utf-8'),'/paro.js':('paro.js','text/javascript; charset=utf-8'),'/explosion.js':('explosion.js','text/javascript; charset=utf-8'),'/gatillo.js':('gatillo.js','text/javascript; charset=utf-8'),'/gp.css':('gp.css','text/css; charset=utf-8'),
                 '/micoche':('micoche.html','text/html; charset=utf-8'),'/micoche.js':('micoche.js','text/javascript; charset=utf-8'),'/micoche.css':('micoche.css','text/css; charset=utf-8'),'/micoche-icon.png':('micoche-icon.png','image/png'),
                 '/scx':('scx.html','text/html; charset=utf-8'),'/scx.js':('scx.js','text/javascript; charset=utf-8'),'/handicap.js':('handicap.js','text/javascript; charset=utf-8'),
-                '/garage':('garage.html','text/html; charset=utf-8'),'/garage.js':('garage.js','text/javascript; charset=utf-8'),'/garage.css':('garage.css','text/css; charset=utf-8')}
+                '/garage':('garage.html','text/html; charset=utf-8'),'/ranking':('ranking.html','text/html; charset=utf-8'),'/ranking.js':('ranking.js','text/javascript; charset=utf-8'),'/garage.js':('garage.js','text/javascript; charset=utf-8'),'/garage.css':('garage.css','text/css; charset=utf-8')}
         if path=='/micoche/':path='/micoche'
         if path=='/garage/':path='/garage'
         if path in assets:
@@ -357,6 +363,13 @@ def revisar_niveles(server):
     de cada piloto y la clase de su coche, sugiere (o cambia, en modo «Cambiar solo») su nivel. Cada sesión una vez."""
     if not NIVEL_LOCK.acquire(blocking=False):return
     try:
+        # 🏆 Ranking: siempre (aunque el nivel automático esté apagado). Mejor vuelta REAL, sin ningún hándicap.
+        try:
+            rk=getattr(server,'ranking',None)
+            if rk is not None:
+                for clave,fuente,rows in _sesiones_terminadas(server):
+                    if not rk.ya(clave):rk.registrar(clave,fuente,rows)
+        except Exception:traceback.print_exc()
         h=server.lap_config.handicap()
         if not h or h.get('nivel_auto','sugerir')=='apagado':return
         hechos=server.niveles_hechos
@@ -382,6 +395,16 @@ def revisar_niveles(server):
     finally:
         NIVEL_LOCK.release()
 
+def vista_ranking(server):
+    """Ranking por clase con tiempos REALES (sin hándicap) + nivel actual de cada piloto (registro o torneo)."""
+    with LOCK:d=server.store.read();ins=server.inscritos.read()['pilotos']
+    niveles={}
+    for p in ins:niveles[p['name'].casefold()]=(p.get('nivel'),'torneo')
+    for p in d['slots']:
+        if p:niveles[p['name'].casefold()]=(p.get('nivel'),'registro')
+    v=server.ranking.view(server.lap_config.handicap(),niveles)
+    v['por_piloto']={k:server.ranking.mejores(k) for k in niveles}
+    return v
 def gp_busy(gp):
     run=gp.current()
     return bool(run and run['phase'] in ('countdown','running','finishing','red'))
@@ -412,7 +435,7 @@ def wire(server):
     # Handicap (ajuste de tiempo por vuelta por clase de coche): también en data/vueltas.json, uno para todo.
     # + Garage: el coche va con el PILOTO (no con el mando): su clase y su hándicap propio (data/garage.json «uso»).
     def hc_live():
-        g=server.garage.read();return handicap_mod.con_pilotos(server.lap_config.handicap(),garage_mod.entradas(g,g.get('uso')))
+        g=server.garage.read();return handicap_mod.con_pilotos(server.lap_config.handicap(),garage_mod.entradas(g,g.get('uso'),range(6)))
     live.current_handicap=hc_live;gp.handicap_actual=server.lap_config.handicap
     gp.garage_read=server.garage.read
     # Bandera amarilla del piloto: triple clic del botón de cambio de carril (la tarjeta SCX solo se escucha).
@@ -458,6 +481,8 @@ def build_server(host,port,data,esp32_url,scx_port=None,scx_baud=57600,simulate=
         server.gp=GrandPrix(data,server.scx,server.live)
         # 🏎️ Garage: coches físicos con su ficha y su propio hándicap (data/garage.json + data/garage-fotos/).
         server.garage=garage_mod.Garage(Path(data),server.avisos)
+        # 🏆 Ranking de pilotos por clase (tiempos reales, sin hándicap): data/ranking.json.
+        server.ranking=ranking_mod.Ranking(Path(data),server.avisos)
         # Torneo por mangas: pilotos inscritos con su nivel (data/inscritos.json).
         server.inscritos=torneo_mod.Inscritos(Path(data));server.avisos.extend(server.inscritos.avisos)
         # Nivel automático por tiempo: sesiones ya revisadas (para no sugerir dos veces lo mismo).

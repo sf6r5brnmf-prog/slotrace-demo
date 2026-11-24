@@ -112,6 +112,7 @@
   function garCars(){return (GAR.data&&GAR.data.cars)||[];}
   function garCar(id){return id?garCars().find(c=>c.id===id)||null:null;}
   function garUso(slot){const d=GAR.data;return d?garCar((d.uso||{})[String(slot)]):null;}
+  function garClaseDe(slot){const d=GAR.data;const v=d?(d.uso||{})[String(slot)]||'':'';const c=garCar(v);if(c)return c.clase;const m=/^clase:(\w+)$/.exec(v);return m?m[1]:'sin_iman';}
   function garUsadoPor(id){const d=GAR.data;if(!d)return null;const e=Object.entries(d.uso||{}).find(([k,v])=>v===id);return e?Number(e[0]):null;}
   async function garPost(body){
     const r=await fetch('/api/garage',{method:'POST',headers:{'Content-Type':'application/json','X-Roster':'1'},body:JSON.stringify(body)});
@@ -149,14 +150,16 @@
   function garPicker(o){
     const s=document.createElement('select');s.className='gar-sel';s.setAttribute('aria-label',o.aria||'Coche del Garage');
     const add=(parent,v,t,dis)=>{const op=document.createElement('option');op.value=v;op.textContent=t;op.disabled=!!dis;parent.append(op);return op;};
-    add(s,'',garCars().length?'🏎️ Sin coche del Garage (como antes)':'🏎️ Sin coche del Garage');
+    // Sin coche del Garage: la clase (imán o no) se escoge AQUÍ, al vincular; nunca en el alta del piloto.
+    const sg=document.createElement('optgroup');sg.label='Coche sin ficha (escoge su clase)';
+    CLASES.forEach(([k,n])=>add(sg,k==='sin_iman'?'':'clase:'+k,'Sin ficha · '+ICON[k]+' '+n));s.append(sg);
     [['casa','🏠 Garage de la casa'],['invitado','🧳 Garage de invitados']].forEach(([t,lbl])=>{
       const cs=garCars().filter(c=>(c.tipo||'casa')===t);if(!cs.length)return;
       const g=document.createElement('optgroup');g.label=lbl;
       cs.forEach(c=>{const u=(o.usados||{})[c.id];add(g,c.id,'🏎️ '+garCarTxt(c)+(t==='invitado'&&c.dueno?' · de '+c.dueno:'')+(u?' · en uso con '+u:''),!!u&&c.id!==o.cur);});
       s.append(g);});
     if(o.onNuevo)add(s,'__nuevo','➕ Coche de invitado nuevo…');
-    s.value=o.cur&&garCar(o.cur)?o.cur:'';const prev=s.value;
+    s.value=o.cur&&(garCar(o.cur)||/^clase:(con_iman|modificado)$/.test(o.cur))?o.cur:'';const prev=s.value;
     s.addEventListener('click',e=>e.stopPropagation());
     s.addEventListener('change',async()=>{
       try{
@@ -176,6 +179,6 @@
   }
   // Sorteo de mandos: n mandos distintos al azar entre los disponibles (1 a 6 por defecto).
   function sortearMandos(n,disp){const a=(disp||[1,2,3,4,5,6]).slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a.slice(0,n);}
-  window.PeluGarage={load:garLoad,start:garStart,cars:garCars,car:garCar,uso:garUso,usadoPor:garUsadoPor,post:garPost,picker:garPicker,pilot:garPilot,quick:garQuick,sortear:sortearMandos,txt:garCarTxt,onChange:f=>GAR.listeners.push(f),get data(){return GAR.data;}};
+  window.PeluGarage={load:garLoad,start:garStart,cars:garCars,car:garCar,uso:garUso,claseDe:garClaseDe,usadoPor:garUsadoPor,post:garPost,picker:garPicker,pilot:garPilot,quick:garQuick,sortear:sortearMandos,txt:garCarTxt,onChange:f=>GAR.listeners.push(f),get data(){return GAR.data;}};
   window.PeluHandicap={CLASES,ICON,NOMBRE,MIN_VUELTA_H,segTxt,adj,label,setTime,upgrade,NIVELES,NIVEL,NIVEL_ICON,AUTO,nivelTxt,detalle,cortesTxt,sugTxt,nivelSettings,nivelPicker};
 })();

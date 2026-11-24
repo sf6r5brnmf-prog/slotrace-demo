@@ -1,10 +1,10 @@
 'use strict';
 // Contenedor de la DEMO: arranca el servidor real (Python) dentro del navegador y muestra la app real en un iframe.
 (function(){
-const V='202611241243';
-const PY=['durable.py','instancia.py','handicap.py','garage.py','torneo.py','pits.py','gatillo.py','scx.py','live.py','gp.py','micoche.py','esp32usb.py','server.py','demo_glue.py'];
+const V='202611241340';
+const PY=['durable.py','instancia.py','handicap.py','garage.py','ranking.py','torneo.py','pits.py','gatillo.py','scx.py','live.py','gp.py','micoche.py','esp32usb.py','server.py','demo_glue.py'];
 const NAMES=['Ernesto','Pepe','Lalo','Mica'];
-const PAGES=['index.html','gp.html','micoche.html','scx.html','garage.html'];
+const PAGES=['index.html','gp.html','micoche.html','scx.html','garage.html','ranking.html'];
 const COLORS=[['Blanco','#edf2f7'],['Amarillo','#ffe23b'],['Rojo','#ff4d50'],['Azul','#3d96ff'],['Verde','#50dc92'],['Naranja','#ff963d']];
 const $=id=>document.getElementById(id);
 let py=null,glue=null,FS=null,ticker=null,saver=null,syncing=false,dirty=false,stopped=false;

@@ -152,7 +152,7 @@ def garage_de(h, car):
     """Coche del Garage que corre con ese mando ({'id','nombre'}) o None. Viene en h['garage'] (garage.efectivo)."""
     try: g = ((h or {}).get('garage') or {}).get(_k(car))
     except (TypeError, ValueError): return None
-    return g if isinstance(g, dict) else None
+    return g if isinstance(g, dict) and g.get('id') else None   # 'sin ficha' (solo clase) no es un coche del Garage
 
 
 def seg_propio(h, car):

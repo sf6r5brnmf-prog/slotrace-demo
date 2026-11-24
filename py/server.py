@@ -15,6 +15,7 @@ import torneo as torneo_mod
 import handicap as handicap_mod
 import garage as garage_mod
 import ranking as ranking_mod
+import pilotos as pilotos_mod
 
 ROOT = Path(__file__).resolve().parent
 COLORS = [('Blanco','#edf2f7'),('Amarillo','#ffe23b'),('Rojo','#ff4d50'),('Azul','#3d96ff'),('Verde','#50dc92'),('Naranja','#ff963d')]
@@ -148,6 +149,9 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/api/garage':
             revisar_garage(self.server)
             return self.reply(200,self.server.garage.view())
+        if path=='/api/pilotos':
+            asegurar_registro(self.server);revisar_niveles(self.server);revisar_garage(self.server)
+            return self.reply(200,vista_pilotos(self.server))
         if path=='/api/ranking':
             revisar_niveles(self.server)
             return self.reply(200,vista_ranking(self.server))
@@ -177,7 +181,7 @@ class Handler(BaseHTTPRequestHandler):
         self.reply(404,{'error':'No se encontró esa página.'})
     def _post(self):
         route=urlsplit(self.path).path
-        if route not in ['/api/slot','/api/session','/api/gp','/api/gp/config','/api/sim','/api/vueltas-config','/api/scx/simular','/api/inscritos','/api/garage']: return self.reply(404,{'error':'Ruta desconocida.'})
+        if route not in ['/api/slot','/api/session','/api/gp','/api/gp/config','/api/sim','/api/vueltas-config','/api/scx/simular','/api/inscritos','/api/garage','/api/pilotos']: return self.reply(404,{'error':'Ruta desconocida.'})
         # Un sitio externo no puede escribir con un formulario o fetch sin CORS.
         origin=self.headers.get('Origin')
         if self.headers.get('X-Roster')!='1' or (origin and urlsplit(origin).netloc!=self.headers.get('Host')):
@@ -193,8 +197,15 @@ class Handler(BaseHTTPRequestHandler):
                     with LOCK:roster=self.server.store.read()
                     return self.reply(200,self.server.gp.command(payload,roster))
                 except GPError as e:return self.reply(e.status,{'error':str(e)})
+            if route=='/api/pilotos':
+                try:return self.reply(200,api_pilotos(self.server,payload))
+                except pilotos_mod.PilotoError as e:return self.reply(e.status,dict({'error':str(e)},**e.extra))
             if route=='/api/inscritos':
-                try:return self.reply(200,self.server.inscritos.write(payload))
+                try:
+                    r=self.server.inscritos.write(payload)
+                    try:self.server.registro.invitados([x['name'] for x in r['pilotos']],{x['name']:x for x in r['pilotos']})
+                    except Exception:traceback.print_exc()
+                    return self.reply(200,r)
                 except torneo_mod.TorneoError as e:return self.reply(e.status,{'error':str(e)})
             if route=='/api/garage':
                 if isinstance(payload,dict) and payload.get('action') in ('usar','rapido'):
@@ -237,6 +248,7 @@ class Handler(BaseHTTPRequestHandler):
                     if not d['slots'][slot]: return self.reply(404,{'error':'Ese lugar ya no tiene piloto.'})
                     if payload['action']=='nivel':d['slots'][slot]['nivel']=nv
                     d['slots'][slot].pop('sugerido',None);d['slots'][slot].pop('nivel_cambio',None)
+                    self.server.registro.desde_slots(d['slots'])
                     d['version']+=1; self.server.store.write(d)
                 return self.reply(200,{'ok':True,'version':d['version']})
             with LOCK:
@@ -267,10 +279,13 @@ class Handler(BaseHTTPRequestHandler):
                     nv=payload.get('nivel',(previous or {}).get('nivel') or handicap_mod.NIVEL_DEFAULT)
                     if nv not in handicap_mod.NIVEL_TXT: raise ValueError('Elige Novato, Intermedio o Experto.')
                     d['slots'][slot]={'name':name,'avatar':avatar,'revision':uuid.uuid4().hex,'nivel':nv}
+                    if previous and previous.get('pid'):d['slots'][slot]['pid']=previous['pid']
                 else: raise ValueError('Acción desconocida.')
+                # 👥 Registro: el piloto queda (o se actualiza) en el registro aunque se quite de la parrilla.
+                self.server.registro.desde_slots(d['slots'])
                 d['version']+=1; self.server.store.write(d)
                 if old and (d['slots'][slot] is None or old!=d['slots'][slot]['avatar']):
-                    (self.server.store.directory/old[1:]).unlink(missing_ok=True)
+                    borrar_avatar(self.server,old)
             self.reply(200,{'ok':True,'version':d['version']})
         except (ValueError,TypeError,KeyError) as e:
             self.reply(400,{'error':str(e) if isinstance(e,ValueError) else 'Datos incompletos.'})
@@ -357,7 +372,188 @@ def revisar_garage(server):
             gar.registrar('gp:'+g['id'],{'tipo':'torneo' if tq else 'gp','at':g.get('created_at'),'fuente':('Torneo' if tq else 'Gran Premio')+time.strftime(' %d/%m %H:%M',time.localtime(g.get('created_at') or time.time())),'coches':coches})
     except Exception as e:
         print('Garage: no se pudo revisar el historial:',e,flush=True)
-    finally:GARAGE_LOCK.release()
+    finally:
+        try:revisar_pilotos(server)
+        except Exception:traceback.print_exc()
+        GARAGE_LOCK.release()
+def asegurar_registro(server):
+    """Todo piloto de la parrilla está en el registro (por si alguien llegó por la ruta vieja /api/slot o por archivo)."""
+    reg=getattr(server,'registro',None)
+    if reg is None:return
+    with LOCK:
+        d=server.store.read()
+        if any(x and not reg.find(x.get('pid') or '') for x in d['slots']) and reg.desde_slots(d['slots']):d['version']+=1;server.store.write(d)
+def revisar_pilotos(server):
+    asegurar_registro(server)
+    """👥 Historial de cada piloto del registro: al terminar una Práctica/Carrera o un Gran Premio/torneo guarda su
+    mejor vuelta REAL, vueltas, posición, si ganó y con qué coche. Cada sesión una vez (registro.json «hechos»)."""
+    reg=getattr(server,'registro',None)
+    if reg is None:return
+    live=server.live;gpo=server.gp
+    with live.lock:
+        s=live.session
+        s=copy.deepcopy(s) if s and s.get('phase')=='ended' and s.get('id') and not reg.ya('live:'+s['id']) else None
+    if s:
+        h=s.get('handicap');hs={};coche={}
+        for p in s['pilots']:
+            car=live.hkey(h,p['slot']);hs[p['slot']]=handicap_mod.seg_de(h,car,p.get('nivel'));g=handicap_mod.garage_de(h,car);coche[p['slot']]=(g or {}).get('nombre') or ''
+        pos={p['slot']:x for x,p in live.standings(s,hs)};race=s.get('type')=='race';filas=[]
+        for p in s['pilots']:
+            laps=[l['s'] for l in p.get('laps') or [] if isinstance(l.get('s'),(int,float))]
+            filas.append((p['name'],min(laps) if laps else None,len(laps),race and pos.get(p['slot'])==1,coche[p['slot']],pos.get(p['slot'])))
+        reg.registrar('live:'+s['id'],{'tipo':'carrera' if race else 'practica','at':s.get('created_at'),
+                      'fuente':('Carrera' if race else 'Práctica')+time.strftime(' %d/%m %H:%M',time.localtime(s.get('created_at') or time.time()))},filas)
+    with gpo.lock:
+        g=gpo.gp
+        g=copy.deepcopy(g) if g and g.get('status')=='done' and not reg.ya('gp:'+g['id']) else None
+    if g:
+        snap=(gpo.snapshot() or {}).get('gp') or {}
+        with gpo.lock:
+            tq=gpo.es_torneo();por={}
+            for run in g['runs']:
+                if run['phase']!='done' or run.get('skipped'):continue
+                h=gpo.handicap_run(run)
+                for sl in run.get('participants') or []:
+                    d=run['data'].get(str(sl))
+                    if not isinstance(d,dict):continue
+                    gg=handicap_mod.garage_de(h,gpo.hk(h,run,sl));laps=[l['s'] for l in d.get('laps') or [] if l.get('valid')]
+                    x=por.setdefault(gpo.pilot(sl)['name'],{'best':None,'n':0,'coche':''})
+                    if laps:x['best']=min(laps) if x['best'] is None else min(x['best'],min(laps));x['n']+=len(laps)
+                    if gg:x['coche']=gg.get('nombre') or x['coche']
+        fin={r.get('name'):r.get('pos') for r in snap.get('final') or []}
+        reg.registrar('gp:'+g['id'],{'tipo':'torneo' if tq else 'gp','at':g.get('created_at'),
+                      'fuente':('Torneo' if tq else 'Gran Premio')+time.strftime(' %d/%m %H:%M',time.localtime(g.get('created_at') or time.time()))},
+                      [(n,x['best'],x['n'],fin.get(n)==1,x['coche'],fin.get(n)) for n,x in por.items()])
+def borrar_avatar(server,av):
+    """Borra un avatar solo si ya nadie lo usa (ni la parrilla ni el registro)."""
+    if not av:return
+    try:
+        sl=server.store.read()['slots'];reg=server.registro.read()['pilotos']
+        if any(x and x.get('avatar')==av for x in sl) or any(p.get('avatar')==av for p in reg):return
+        (server.store.directory/av[1:]).unlink(missing_ok=True)
+    except Exception:traceback.print_exc()
+def avatar_png(server,image):
+    """Avatar del piloto: PNG de 600×720 hecho en el teléfono (con foto o con sus iniciales)."""
+    if not isinstance(image,str) or not image.startswith('data:image/png;base64,'): raise pilotos_mod.PilotoError('El avatar no es válido.')
+    try: raw=base64.b64decode(image.split(',',1)[1],validate=True)
+    except (ValueError,binascii.Error): raise pilotos_mod.PilotoError('La imagen no es válida.')
+    if not (100<len(raw)<=1800000 and raw[:8]==b'\x89PNG\r\n\x1a\n' and raw[12:16]==b'IHDR' and struct.unpack('>II',raw[16:24])==(600,720)):
+        raise pilotos_mod.PilotoError('El avatar no es válido. Vuelve a elegir la foto.')
+    av='/avatars/'+uuid.uuid4().hex+'.png';durable.escribir_bytes(server.store.directory/av[1:],raw);return av
+def vista_pilotos(server):
+    """Registro completo: cada piloto con su lugar en la parrilla, mejores vueltas reales por clase e historial."""
+    with LOCK:d=server.store.read()
+    reg=server.registro;r=reg.read();lugar={}
+    for i,x in enumerate(d['slots']):
+        if x and x.get('pid'):lugar[x['pid']]=i
+    out=[]
+    for p in r['pilotos']:
+        q=dict(p,slot=lugar.get(p['id']),mejores=server.ranking.mejores(p['name']),hist=(r['hist'].get(p['id']) or [])[:20])
+        with reg.lock:q.update(reg.stats(p['id']))
+        out.append(q)
+    return {'version':r['version'],'parrilla_v':d['version'],'pilotos':out,'colors':[{'name':n,'hex':h} for n,h in COLORS],'colores':pilotos_mod.COLORES}
+def _renombrar(server,viejo,nuevo):
+    """Nombre nuevo (o pilotos unidos): ranking e inscritos del torneo siguen al piloto."""
+    if not viejo or viejo==nuevo:return
+    try:server.ranking.renombrar(viejo,nuevo)
+    except Exception:traceback.print_exc()
+    try:
+        ins=server.inscritos.read()['pilotos'];ch=False;ya={x['name'].casefold() for x in ins}
+        for x in ins:
+            if x['name'].casefold()==viejo.casefold():
+                if nuevo.casefold() in ya and nuevo.casefold()!=viejo.casefold():ins.remove(x)
+                else:x['name']=nuevo
+                ch=True;break
+        if ch:server.inscritos.write({'pilotos':ins})
+    except Exception:traceback.print_exc()
+def _levantar(server,d,i):
+    """Quita a un piloto de la parrilla (sigue en el registro). Su coche del Garage se libera."""
+    if not d['slots'][i]:return
+    d['slots'][i]=None
+    try:server.garage.command({'action':'usar','slot':i,'id':''})
+    except Exception:pass
+def _ocupado(server):
+    live=server.live
+    with live.lock:s=live.session;return bool(s and s.get('phase') not in ('ended',None))
+def api_pilotos(server,payload):
+    asegurar_registro(server)
+    reg=server.registro;a=payload.get('action');pid=payload.get('id')
+    E=pilotos_mod.PilotoError
+    with LOCK:
+        d=server.store.read();cambio_parrilla=False;tirar=[]
+        if a=='guardar':
+            img=payload.get('image');av=avatar_png(server,img) if img else None
+            previo=reg.find(pid) if pid else None;old_av=(previo or {}).get('avatar')
+            try:p,viejo=reg.guardar(payload,av)
+            except pilotos_mod.PilotoError:
+                if av:(server.store.directory/av[1:]).unlink(missing_ok=True)
+                raise
+            if previo and viejo!=p['name']:_renombrar(server,viejo,p['name'])
+            cambio_parrilla=reg.a_slots(d['slots'])
+            if av and old_av and old_av!=av:
+                if cambio_parrilla:d['version']+=1;server.store.write(d);cambio_parrilla=False
+                borrar_avatar(server,old_av)
+            res={'saved':p['id']}
+        elif a=='unir':
+            x,y=reg.unir(payload.get('de'),payload.get('a'))
+            for s in d['slots']:
+                if s and s.get('pid')==x['id']:
+                    if any(t and t.get('pid')==y['id'] for t in d['slots']):_levantar(server,d,d['slots'].index(s))
+                    else:s['pid']=y['id']
+                    cambio_parrilla=True
+            _renombrar(server,x['name'],y['name'])
+            cambio_parrilla=reg.a_slots(d['slots']) or cambio_parrilla
+            res={'saved':y['id']}
+        elif a in ('archivar','promover','nivel','nivel_descartar','borrar'):
+            p=reg.find(pid)
+            if not p:raise E('Ese piloto ya no está en el registro.',404)
+            if a in ('archivar','borrar') and (a=='borrar' or payload.get('valor')):
+                for i,s in enumerate(d['slots']):
+                    if s and s.get('pid')==pid:
+                        if _ocupado(server):raise E('Hay una sesión en curso con %s. Termínala antes.'%p['name'],409)
+                        _levantar(server,d,i);cambio_parrilla=True
+            p=reg.simple(pid,a,payload.get('valor') if a!='nivel' else payload.get('nivel'))
+            if a=='borrar':
+                try:server.ranking.borrar(p['name'])
+                except Exception:traceback.print_exc()
+                tirar.append(p.get('avatar'))
+            cambio_parrilla=reg.a_slots(d['slots']) or cambio_parrilla
+            res={'saved':pid}
+        elif a=='sentar':
+            p=reg.find(pid)
+            if not p:raise E('Ese piloto ya no está en el registro.',404)
+            if any(s and s.get('pid')==pid for s in d['slots']):return dict(vista_pilotos(server),saved=pid)
+            if p.get('archivado'):raise E('%s está archivado. Reactívalo primero.'%p['name'])
+            if any(s and pilotos_mod.clave(s['name'])==pilotos_mod.clave(p['name']) for s in d['slots']):raise E('Ya hay un «%s» en la parrilla.'%p['name'],409)
+            i=payload.get('slot')
+            if not (type(i)==int and 0<=i<6 and not d['slots'][i]):
+                i=next((k for k,s in enumerate(d['slots']) if not s),None)
+            if i is None:raise E('La parrilla ya tiene 6 pilotos. Quita a alguien para que entre %s.'%p['name'],409)
+            if not p.get('avatar'):
+                img=payload.get('image')
+                if not img:raise E('Falta el avatar de %s.'%p['name'])
+                with reg.lock:p['avatar']=avatar_png(server,img);p['foto']=False;reg.save()
+            d['slots'][i]={'name':p['name'],'avatar':p['avatar'],'revision':uuid.uuid4().hex,'nivel':p['nivel'],'pid':pid}
+            for k in ('sugerido','nivel_cambio'):
+                if p.get(k):d['slots'][i][k]=copy.deepcopy(p[k])
+            # Su coche habitual, si nadie lo trae ahorita.
+            if p.get('coche'):
+                try:
+                    g=server.garage.read()
+                    if any(c['id']==p['coche'] for c in g['cars']) and p['coche'] not in (g.get('uso') or {}).values():
+                        server.garage.command({'action':'usar','slot':i,'id':p['coche']})
+                except Exception:pass
+            cambio_parrilla=True;res={'saved':pid,'slot':i}
+        elif a=='levantar':
+            i=payload.get('slot')
+            if not (type(i)==int and 0<=i<6):raise E('Lugar inválido.')
+            if d['slots'][i] and _ocupado(server) and any(x['slot']==i for x in (server.live.session or {}).get('pilots') or []):
+                raise E('%s está en la sesión en curso. Termínala antes.'%d['slots'][i]['name'],409)
+            _levantar(server,d,i);cambio_parrilla=True;res={'ok':True}
+        else:raise E('Acción desconocida.')
+        if cambio_parrilla:d['version']+=1;server.store.write(d)
+        for av in tirar:borrar_avatar(server,av)
+    return dict(vista_pilotos(server),**res)
 def revisar_niveles(server):
     """Al terminar una Práctica/Carrera o cada parte del Gran Premio/torneo: con la mejor vuelta REAL (sin handicap)
     de cada piloto y la clase de su coche, sugiere (o cambia, en modo «Cambiar solo») su nivel. Cada sesión una vez."""
@@ -384,7 +580,11 @@ def revisar_niveles(server):
                     nm=name.casefold()
                     for p in [x for x in d['slots'] if x]+ins:
                         if p['name'].casefold()==nm:handicap_mod.aplicar_nivel(p,h,clase,best,n,fuente,ahora)
+                    try:server.registro.aplicar_nivel(h,name,clase,best,n,fuente,ahora)
+                    except Exception:traceback.print_exc()
                 hechos.append(clave)
+            try:server.registro.save()
+            except OSError:pass
             if json.dumps(d['slots'],sort_keys=True)!=antes_d:d['version']+=1;server.store.write(d)
             if json.dumps(ins,sort_keys=True)!=antes_i:server.inscritos.write({'pilotos':ins})
         del hechos[:-200]
@@ -495,6 +695,10 @@ def build_server(host,port,data,esp32_url,scx_port=None,scx_baud=57600,simulate=
         server.niveles_path=Path(data)/'niveles_revisados.json'
         nh,_=durable.leer_json(server.niveles_path,validate=lambda x:x if isinstance(x,dict) and isinstance(x.get('hechos'),list) else (_ for _ in ()).throw(ValueError('x')),nombre='niveles_revisados.json')
         server.niveles_hechos=[str(k) for k in (nh or {}).get('hechos',[])][-200:]
+        # 👥 Registro de pilotos: nace con todos los pilotos que ya había (parrilla, torneo y ranking). Nada se borra.
+        server.registro=pilotos_mod.Registro(Path(data),server.avisos)
+        d=server.store.read()
+        if server.registro.migrar(d['slots'],server.inscritos.read()['pilotos'],server.ranking.nombres()):d['version']+=1;server.store.write(d)
         # ESP32 del sensor por cable USB (solo lectura, solo para la 💥 explosión al instante). Nunca la tarjeta SCX.
         usb_off=simulate or (isinstance(esp32_usb,str) and esp32_usb.strip().lower() in USB_OFF) or esp32_usb is False
         usb_port=None if usb_off or esp32_usb in (None,True) or str(esp32_usb).strip().lower()=='auto' else str(esp32_usb)

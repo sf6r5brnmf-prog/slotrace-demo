@@ -44,6 +44,24 @@ class Ranking:
             self.data['version'] += 1
             durable.escribir_json(self.path, self.data, backup=True, indent=1)
             return True
+    def renombrar(self, viejo, nuevo):
+        """Cambio de nombre o dos registros unidos: junta sus tiempos (se queda la mejor vuelta de cada clase)."""
+        with self.lock:
+            a = self.data['pilotos'].pop((viejo or '').casefold(), None)
+            if not a: return False
+            b = self.data['pilotos'].setdefault(nuevo.casefold(), {'name': nuevo, 'clases': {}}); b['name'] = nuevo
+            for k, c in a['clases'].items():
+                d = b['clases'].get(k)
+                if not d: b['clases'][k] = c; continue
+                d['vueltas'] += c.get('vueltas', 0); d['sesiones'] += c.get('sesiones', 0)
+                if c.get('mejor') is not None and (d.get('mejor') is None or c['mejor'] < d['mejor']): d.update(mejor=c['mejor'], fuente=c.get('fuente'), at=c.get('at'))
+            self.data['version'] += 1; durable.escribir_json(self.path, self.data, backup=True, indent=1); return True
+    def borrar(self, name):
+        with self.lock:
+            if self.data['pilotos'].pop((name or '').casefold(), None) is None: return False
+            self.data['version'] += 1; durable.escribir_json(self.path, self.data, backup=True, indent=1); return True
+    def nombres(self):
+        with self.lock: return [p['name'] for p in self.data['pilotos'].values()]
     def mejores(self, name):
         """{clase: mejor vuelta real} de un piloto (para su tarjeta)."""
         with self.lock:

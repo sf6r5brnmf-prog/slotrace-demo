@@ -18,7 +18,27 @@ function cfgT(){const c=state?.config||{};return {cars:c.torneo_cars||3,min:c.to
 function formatText(g){const t=g.torneo||{};return 'Torneo por mangas · '+(t.inscritos||g.pilots.length)+' pilotos · '+t.cars+' coches por manga · '+t.minutos+' min por manga · el último de cada manga queda eliminado · final de 6'+(t.final_modo==='una'?' a '+t.final_laps+' vueltas':' en mangas (suma de vueltas)');}
 
 /* ---------------- Inscripción ---------------- */
-async function loadIns(){try{const r=await fetch('/api/inscritos',{cache:'no-store'});if(r.ok){ins=await r.json();}}catch(e){}return ins;}
+async function loadIns(){try{const r=await fetch('/api/inscritos',{cache:'no-store'});if(r.ok){ins=await r.json();}}catch(e){}loadReg();return ins;}
+// 👥 Del registro de pilotos: toca un piloto para inscribirlo (con su nivel y su coche habitual) o sacarlo.
+let REGT=null,regAt=0;
+async function loadReg(){regAt=Date.now();try{const r=await fetch('/api/pilotos',{cache:'no-store'});if(r.ok){const d=await r.json();const ch=JSON.stringify(d.pilotos)!==JSON.stringify(REGT&&REGT.pilotos);REGT=d;if(ch)renderReg();}}catch(e){}}
+function renderReg(){
+  const box=$('tqReg');if(!box||!ins)return;box.replaceChildren();
+  const ps=(REGT&&REGT.pilotos||[]).filter(p=>!p.archivado);if(!ps.length)return;
+  const k=n=>String(n||'').toLocaleLowerCase('es-MX');const dentro=new Set(ins.pilotos.map(p=>k(p.name)));
+  const h=el('p','tq-reg-h');h.append(el('strong','','👥 Del registro'),el('small','muted',' · toca para inscribir o sacar (entra con su nivel y su coche habitual)'));box.append(h);
+  const row=el('div','reg-chip-row');
+  ps.slice().sort((a,b)=>dentro.has(k(b.name))-dentro.has(k(a.name))||a.name.localeCompare(b.name,'es-MX')).forEach(p=>{
+    const on=dentro.has(k(p.name)),c=el('button','reg-chip'+(on?' on':''));c.type='button';c.style.setProperty('--team',p.color);c.setAttribute('aria-pressed',String(on));
+    if(p.avatar){const i=el('img','reg-chip-av');i.src=p.avatar+'?v=mica2';i.alt='';c.append(i);}else{const i=el('span','reg-chip-av reg-ini',(p.name.trim()[0]||'?').toUpperCase());c.append(i);}
+    c.append(el('span','',(on?'✓ ':'')+p.name));
+    c.addEventListener('click',()=>{
+      if(on){ins.pilotos=ins.pilotos.filter(x=>k(x.name)!==k(p.name));}
+      else{if(ins.pilotos.length>=(ins.max||24)){$('tqError').textContent='Ya no caben más inscritos.';return;}const q={name:p.name,nivel:p.nivel||'intermedio'};if(p.coche&&!ins.pilotos.some(x=>x.garage_id===p.coche))q.garage_id=p.coche;ins.pilotos.push(q);}
+      $('tqError').textContent='';saveIns();renderSetup(true);});
+    row.append(c);});
+  box.append(row);
+}
 function saveIns(){clearTimeout(insTimer);insTimer=setTimeout(async()=>{insBusy=true;try{ins=await post('/api/inscritos',{pilotos:ins.pilotos});$('tqError').textContent='';}catch(e){$('tqError').textContent=e.message;}finally{insBusy=false;renderSetup(true);}},250);}
 function levelPicker(cur,onPick,small){
   const box=el('span','tq-lvls'+(small?' sm':''));box.setAttribute('role','radiogroup');
@@ -28,6 +48,7 @@ function levelPicker(cur,onPick,small){
 }
 function renderSetup(force){
   const tab=$('torneoTab');if(!tab||tab.hidden&&!force)return;
+  if(Date.now()-regAt>5000)loadReg();
   if(!ins){loadIns().then(()=>{if(ins)renderSetup(true);});return;}
   const c=cfgT(),n=ins.pilotos.length;
   const sig=JSON.stringify([ins.version,ins.pilotos,c,addLevel,(PeluGarage.data||{}).version]);if(!force&&sig===setupSig)return;setupSig=sig;
@@ -85,6 +106,7 @@ function renderSetup(force){
     const mangas=pl.rondas.reduce((a,r)=>a+r.mangas,0)+pl.final;
     pv.append(ol,el('p','muted','≈ '+mangas+' mangas en total · '+Math.round(mangas*(c.min+1.5))+' min aprox. (con salidas y cambios de piloto).'));}
   $('tqCreate').disabled=n<MIN;
+  renderReg();
 }
 function addPilot(name,nivel){
   name=String(name||'').replace(/\s+/g,' ').trim().slice(0,24);if(!name)return 'Escribe el nombre del piloto.';

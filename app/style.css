@@ -106,3 +106,90 @@
 .hc-chip{display:inline-flex;align-items:center;padding:6px 10px;border-radius:10px;background:#ffffff12;font:700 13px system-ui;white-space:nowrap}
 .hc-chip.falta{background:#ff4b4b22;color:#ff8a8a}
 .gar-sel.falta{border-color:#ff4b4b;color:#ffb3b3}
+/* ===== 👥 Registro de pilotos ===== */
+.reg-parrilla{margin:0 0 14px}
+.reg-h{font:800 15px system-ui;margin:0 0 8px}.reg-h small{color:var(--muted);font-weight:600}
+.reg-strip{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
+.reg-slot{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 4px 7px;border:1px solid var(--line);border-top:4px solid var(--team);border-radius:10px;background:#11151b;cursor:pointer;min-width:0}
+.reg-slot.libre{opacity:.6;border-style:dashed;border-top-style:solid}
+.reg-slot-av{width:100%;max-width:56px;aspect-ratio:5/6;object-fit:cover;border-radius:6px;background:#0b0d11;display:grid;place-items:center;font:900 17px system-ui}
+.reg-slot-plus{width:100%;max-width:56px;aspect-ratio:5/6;display:grid;place-items:center;font:300 26px system-ui;color:var(--muted)}
+.reg-slot-n{font:700 11px system-ui;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.reg-slot-x{position:absolute;top:-6px;right:-6px;width:24px;height:24px;padding:0;border-radius:99px;font:700 12px system-ui;background:#2a1416;color:#ff8179;border:1px solid #ff817960;min-height:0}
+.reg-tools{display:grid;grid-template-columns:1fr auto;gap:8px;margin:6px 0 8px}
+.reg-tools input,.reg-tools select,#cocheHab,.reg-quick input:not([type=checkbox]),.rd-unir select{background:#0b0d11;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:11px;font:16px system-ui;min-width:0}
+.reg-filtros{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:10px}
+.reg-f{flex-shrink:0;border-radius:99px;padding:7px 12px;font:700 13px system-ui}
+.reg-f.on{background:var(--lime);color:#11150b;border-color:var(--lime)}
+.reg-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:10px}
+.reg-card{display:grid;grid-template-columns:64px 1fr auto;gap:10px;align-items:start;padding:10px;border:1px solid var(--line);border-left:5px solid var(--team);border-radius:12px;background:radial-gradient(120% 80% at 50% 0%,#1c222c,#11151b);cursor:pointer;min-width:0}
+.reg-card.sentado{box-shadow:inset 0 0 0 1px #d5ff4255}
+.reg-card.archivado{opacity:.6}
+.reg-av{width:64px;height:77px;object-fit:cover;border-radius:8px;background:#0b0d11}
+.reg-ini{display:grid;place-items:center;font:900 24px system-ui;color:var(--team);background:#0b0d11;border:2px solid var(--team)}
+.reg-info{min-width:0;display:grid;gap:5px}
+.reg-nombre{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px}
+.reg-nombre strong{font-size:19px;overflow-wrap:anywhere;line-height:1.1}
+.reg-apodo{color:var(--muted);font-size:13px}
+.reg-tags{display:flex;flex-wrap:wrap;gap:4px}
+.reg-tags .nivel-chip{font-size:12px}
+.nv-src{opacity:.75;font-weight:600}
+.reg-tag{font:700 11px system-ui;padding:3px 8px;border-radius:99px;background:#ffffff14}
+.reg-tag.inv{background:#3b82f633;color:#9cc3ff}.reg-tag.arch{background:#ffffff10}.reg-tag.sug{background:#f5c54233;color:#f5c542}
+.reg-card .mejores-box{padding:0}
+.reg-stats{margin:0;color:var(--muted);font-size:12px}
+.reg-seat{font:800 12px system-ui;padding:8px 9px;border-radius:9px;white-space:nowrap}
+.reg-seat.on{background:#d5ff421f;color:var(--lime);border-color:#d5ff4280}
+.reg-vacio{grid-column:1/-1}
+.dup-aviso{margin:-12px 0 14px;padding:8px 10px;border-radius:8px;background:#f5c54222;color:#f5c542;font:600 13px system-ui}
+#apodo{width:100%;background:#0b0d11;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:12px;font:16px system-ui;margin-bottom:16px}
+#cocheHab{width:100%;margin-bottom:4px}
+.reg-check{display:flex!important;align-items:center;gap:8px;font-weight:700;margin:0 0 16px!important}
+.reg-check input{width:22px;height:22px;accent-color:var(--lime)}
+.color-pick{display:flex;gap:8px;margin-bottom:18px}
+.color-pick .sw{width:34px;height:34px;border-radius:99px;padding:0;border:2px solid #0b0d11;min-height:0}
+.color-pick .sw.on{outline:3px solid #fff;outline-offset:1px}
+.reg-detalle{width:min(640px,100%)}
+.rd-head{display:grid;grid-template-columns:110px 1fr;gap:14px;align-items:start}
+.rd-av{width:110px;height:132px;object-fit:cover;border-radius:10px;background:#0b0d11}
+.rd-av.reg-ini{font-size:40px}
+.rd-nivel{display:grid;gap:6px}.rd-nivel .help{margin:0}
+.rd-lbl{font:800 12px system-ui;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.rd-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:14px 0}
+.rd-kpi{display:grid;justify-items:center;padding:8px 4px;border-radius:10px;background:#ffffff0d}
+.rd-kpi b{font:900 22px system-ui}.rd-kpi span{font:600 11px system-ui;color:var(--muted)}
+.reg-detalle .mejores-box{padding:0;margin-bottom:8px}
+.rd-coche{margin:4px 0 12px;font-size:14px}
+.rd-acciones{display:flex;flex-wrap:wrap;gap:8px}
+.rd-acciones button{flex:1 1 45%;font-size:14px;padding:11px 10px}
+.rd-unir{margin:14px 0 0;padding:10px;border:1px solid var(--line);border-radius:10px}
+.rd-unir summary{cursor:pointer;font:700 14px system-ui}
+.rd-unir select{width:100%;margin:6px 0 8px}
+.rd-h{font-size:16px;margin:18px 0 8px}
+.rd-hist{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.rd-hist li{display:grid;gap:2px;padding:8px 10px;border-radius:8px;background:#ffffff0b}
+.rd-h-f{font:700 13px system-ui}.rd-h-d{font:600 12px system-ui;color:var(--muted)}
+.rd-borrar{width:100%;margin-top:16px}
+.reg-chips{grid-column:1/-1;display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#11151b}
+.reg-chips-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}
+.reg-chip-row{display:flex;flex-wrap:wrap;gap:6px}
+.reg-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px 4px 4px;border-radius:99px;border:1px solid var(--line);border-left:4px solid var(--team);font:700 13px system-ui;min-height:36px}
+.reg-chip.on{background:#d5ff421f;border-color:#d5ff4280;border-left-color:var(--team);color:var(--lime)}
+.reg-chip.nuevo{padding:6px 12px;border-left:1px dashed var(--line);border-style:dashed}
+.reg-chip-av{width:28px;height:28px;border-radius:99px;object-fit:cover;font:900 11px system-ui;border-width:1px}
+.reg-quick{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.reg-quick input:not([type=checkbox]){flex:1 1 160px}
+.reg-quick .reg-check{margin:0!important}
+.reg-quick .error{width:100%;margin:0}
+.tq-reg{margin:8px 0}
+@media(max-width:700px){
+  .reg-list{grid-template-columns:1fr}
+  .reg-strip{gap:4px}
+  .reg-slot-n{font-size:10px}
+  .reg-card{grid-template-columns:56px 1fr;}
+  .reg-av{width:56px;height:67px}
+  .reg-act{grid-column:1/-1}
+  .reg-seat{width:100%}
+  .rd-head{grid-template-columns:90px 1fr}.rd-av{width:90px;height:108px}
+}
+.reg-check{flex-wrap:wrap}.reg-check small{flex-basis:100%;font-weight:500;font-size:12px}

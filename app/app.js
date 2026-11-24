@@ -1,23 +1,13 @@
 'use strict';
 const $=id=>document.getElementById(id);
 let rosterFails=0,roster=null,slot=null,expected=null,photo=null,existing=null,photoChanged=false,lastVersion=-1,polling=false,saving=false,photoJob=0,previousFocus=null;
-const canvas=$('avatar'),ctx=canvas.getContext('2d');
+const canvas=$('avatar');let ctx=canvas.getContext('2d');
 function notify(text){$('toast').textContent=text;$('toast').style.display='block';clearTimeout(notify.timer);notify.timer=setTimeout(()=>$('toast').style.display='none',4200);}
 function element(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;}
 function avatarSrc(path){return path+(path.includes('?')?'&':'?')+'v=mica2';}
 function render(){
-  const board=$('board');board.replaceChildren();
-  const count=roster.slots.filter(Boolean).length;$('count').textContent=count+' de 6 pilotos';
-  roster.slots.forEach((pilot,i)=>{
-    const card=element('article','pilot'+(pilot?'':' empty'));card.style.setProperty('--team',roster.colors[i].hex);
-    const top=element('div','card-top');top.append(element('span','team','Equipo '+roster.colors[i].name),element('span','slot-number',String(i+1).padStart(2,'0')));card.append(top);
-    if(pilot){const img=element('img','portrait');img.src=avatarSrc(pilot.avatar);img.alt='Avatar de piloto: '+pilot.name;card.append(img);}
-    else{const art=element('div','empty-art');art.append(element('strong','','+'),element('span','','Tu lugar en la parrilla'));card.append(art);}
-    const bottom=element('div','card-bottom'),btn=element('button','',pilot?'Editar':'Agregar');btn.type='button';btn.addEventListener('click',()=>openEditor(i));
-    bottom.append(element('h2','',pilot?pilot.name:'Lugar libre'),btn);card.append(bottom);
-    if(pilot)card.append(nivelBox(pilot,i),mejoresBox((roster.mejores||[])[i]||{}));
-    board.append(card);
-  });
+  // 👥 La pantalla de pilotos es el REGISTRO (pilotos.js); la parrilla de 6 sigue siendo la de las carreras.
+  if(window.PeluPilotos)PeluPilotos.load();
   syncMenuRoster();
 }
 // Nivel del piloto (Novato / Intermedio / Experto) y «Nivel sugerido» por sus tiempos (ver handicap.py).
@@ -47,7 +37,7 @@ async function setNivel(i,nivel){
     const d=await r.json();if(!r.ok)throw Error(d.error||'No se pudo guardar.');await poll();if(nivel)notify('Nivel guardado: '+PeluHandicap.nivelTxt(nivel)+'.');}
   catch(e){notify(e.message||'No hay conexión con la Mac.');}
 }
-let editNivel='intermedio';
+let editNivel='intermedio',editPid=null,editColor=null,editFoto=false,editSentar=false,editInfo=null;
 function renderNivelPick(){const b=$('nivelPick');if(!b)return;b.replaceChildren(PeluHandicap.nivelPicker(editNivel,k=>{editNivel=k;renderNivelPick();if(existing||photo)$('save').disabled=false;}));}
 async function poll(){
   if(polling)return;polling=true;
@@ -91,8 +81,9 @@ function drawVisorMica(){
   ctx.fillRect(121,170,358,250);
   ctx.globalCompositeOperation=prev;
 }
+function iniciales(n){const w=String(n||'').trim().split(/\s+/).filter(Boolean);return ((w[0]||'?')[0]+(w.length>1?w[w.length-1][0]:(w[0]||'').slice(1,2))).toLocaleUpperCase('es-MX');}
 function drawAvatar(){
-  const color=roster?roster.colors[slot??0].hex:'#edf2f7';
+  const color=editColor||(roster?roster.colors[slot??0].hex:'#edf2f7');
   ctx.clearRect(0,0,600,720);const bg=ctx.createLinearGradient(0,0,600,720);bg.addColorStop(0,'#26313f');bg.addColorStop(1,'#080b10');ctx.fillStyle=bg;ctx.fillRect(0,0,600,720);
   ctx.save();ctx.globalAlpha=.1;ctx.strokeStyle=color;ctx.lineWidth=24;for(let x=-720;x<700;x+=100){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x+720,720);ctx.stroke();}ctx.restore();
   // Traje y hombros.
@@ -109,52 +100,83 @@ function drawAvatar(){
     const zoom=Number($('zoom').value), scale=Math.max(358/photo.width,250/photo.height)*zoom;
     const w=photo.width*scale,h=photo.height*scale;
     ctx.drawImage(photo,300-w/2+Number($('horizontal').value),295-h/2+Number($('vertical').value),w,h);
-  }else{ctx.fillStyle='#26313f';ctx.fillRect(121,170,358,250);ctx.fillStyle='#aab4c2';ctx.font='22px system-ui';ctx.textAlign='center';ctx.fillText('Tu rostro aquí',300,300);}
+  }else{ctx.fillStyle='#26313f';ctx.fillRect(121,170,358,250);ctx.fillStyle=color;ctx.font='900 150px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(iniciales($('name').value||editInfo?.name),300,300,330);ctx.textBaseline='alphabetic';}
   drawVisorMica();
   ctx.restore();ctx.strokeStyle='#ffffff75';ctx.lineWidth=4;rounded(121,170,358,250,62);ctx.stroke();
   ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(125,398);ctx.quadraticCurveTo(300,456,475,398);ctx.lineTo(444,478);ctx.quadraticCurveTo(300,565,156,478);ctx.closePath();ctx.fill();
-  ctx.fillStyle='#131a24';rounded(238,464,124,23,10);ctx.fill();ctx.fillStyle='#ffffff65';ctx.fillRect(286,81,28,65);ctx.fillStyle='#111822';ctx.font='900 25px system-ui';ctx.textAlign='center';ctx.fillText(String((slot??0)+1).padStart(2,'0'),300,132);
-  ctx.fillStyle='#10151ee8';ctx.fillRect(0,657,600,63);ctx.fillStyle='#f5f7fa';ctx.font='900 28px system-ui';ctx.textAlign='center';ctx.fillText('PILOTO / '+String((slot??0)+1).padStart(2,'0'),300,699,550);
+  ctx.fillStyle='#131a24';rounded(238,464,124,23,10);ctx.fill();ctx.fillStyle='#ffffff65';ctx.fillRect(286,81,28,65);
+  ctx.fillStyle='#10151ee8';ctx.fillRect(0,657,600,63);ctx.fillStyle='#f5f7fa';ctx.font='900 28px system-ui';ctx.textAlign='center';ctx.fillText('SLOTRACE · PILOTO',300,699,550);
 }
-function preview(){if(existing&&!photoChanged){ctx.clearRect(0,0,600,720);ctx.drawImage(existing,0,0,600,720);}else drawAvatar();}
+function avatarIniciales(name,color){
+  const c=document.createElement('canvas');c.width=600;c.height=720;const keep=[ctx,photo,editColor,editInfo];
+  ctx=c.getContext('2d');photo=null;editColor=color;editInfo={name};const nm=$('name').value;$('name').value=name;
+  try{drawAvatar();}finally{$('name').value=nm;[ctx,photo,editColor,editInfo]=keep;}
+  return c.toDataURL('image/png');
+}
+function preview(){if(existing&&!photoChanged&&editFoto){ctx.clearRect(0,0,600,720);ctx.drawImage(existing,0,0,600,720);}else drawAvatar();}
 async function loadImage(url){return new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=()=>reject(Error('No se pudo abrir la foto. Prueba con una imagen JPEG o PNG.'));im.src=url;});}
 async function choosePhoto(event){
   const file=event.target.files[0];if(!file)return;
   const job=++photoJob;$('error').textContent='';$('save').disabled=true;
   let url;
   try{if(file.size>25*1024*1024)throw Error('La foto pesa más de 25 MB. Elige una más pequeña.');
-    url=URL.createObjectURL(file);const image=await loadImage(url);if(job!==photoJob||slot===null)return;
+    url=URL.createObjectURL(file);const image=await loadImage(url);if(job!==photoJob||$('overlay').hidden)return;
     // Limitar memoria y quitar metadatos antes de componer.
     const resized=document.createElement('canvas'),factor=Math.min(1,1600/Math.max(image.width,image.height));resized.width=Math.round(image.width*factor);resized.height=Math.round(image.height*factor);resized.getContext('2d').drawImage(image,0,0,resized.width,resized.height);
     photo=resized;photoChanged=true;existing=null;$('zoom').value='1';$('vertical').value='0';$('horizontal').value='0';$('adjustments').hidden=false;preview();
   }catch(e){$('error').textContent=e.message;}
   finally{if(url)URL.revokeObjectURL(url);if(job===photoJob)$('save').disabled=false;event.target.value='';}
 }
-async function openEditor(i){
-  if(!roster)return;const pilot=roster.slots[i];previousFocus=document.activeElement;slot=i;expected=pilot?pilot.revision:null;photo=null;existing=null;photoChanged=false;const job=++photoJob;
-  editNivel=pilot&&pilot.nivel||'intermedio';renderNivelPick();
-  $('name').value=pilot?pilot.name:'';$('error').textContent='';$('zoom').value='1';$('vertical').value='0';$('horizontal').value='0';$('adjustments').hidden=true;$('remove').hidden=!pilot;
-  $('modalTitle').textContent=pilot?'Editar piloto':'Agregar piloto';$('teamLabel').textContent='Lugar '+(i+1)+' · Equipo '+roster.colors[i].name;$('overlay').style.setProperty('--team',roster.colors[i].hex);$('overlay').hidden=false;document.body.classList.add('modal-open');$('save').disabled=!!pilot;drawAvatar();$('name').focus();
-  if(pilot){try{const im=await loadImage(avatarSrc(pilot.avatar));if(job!==photoJob)return;existing=im;preview();}catch(e){$('error').textContent='No se pudo cargar el avatar. Elige otra foto.';}finally{if(job===photoJob)$('save').disabled=false;}}
+// Alta / edición del piloto del REGISTRO. openEditor(i) (lugar de la parrilla) se queda por compatibilidad.
+async function openEditor(i){const p=roster&&roster.slots[i];if(p&&p.pid)return openPilot(p.pid);return openPilot(null,{sentar:true});}
+function colorPick(){const b=$('colorPick');b.replaceChildren();(window.PeluPilotos?.colores()||[]).forEach(c=>{const x=element('button','sw'+(c.hex===editColor?' on':''));x.type='button';x.style.background=c.hex;x.title=c.name;x.setAttribute('aria-label','Color '+c.name);x.addEventListener('click',()=>{editColor=c.hex;colorPick();if(photoChanged||!editFoto)preview();});b.append(x);});}
+function cocheHab(sel){const s=$('cocheHab');s.replaceChildren();const o=element('option','','— Ninguno —');o.value='';s.append(o);
+  PeluGarage.cars().forEach(c=>{const x=element('option','',(c.tipo==='invitado'?'👥 ':'🏠 ')+PeluGarage.txt(c));x.value=c.id;s.append(x);});s.value=sel||'';}
+async function openPilot(pid,opts={}){
+  const p=pid&&window.PeluPilotos?PeluPilotos.get(pid):null;previousFocus=document.activeElement;slot=null;editPid=p?p.id:null;editInfo=p;editSentar=!!opts.sentar;
+  photo=null;existing=null;photoChanged=false;editFoto=!!(p&&p.foto&&p.avatar);const job=++photoJob;
+  editColor=p?p.color:(PeluPilotos?.colorLibre()||'#d5ff42');editNivel=p&&p.nivel||'intermedio';renderNivelPick();colorPick();cocheHab(p?p.coche:'');
+  $('name').value=p?p.name:(opts.name||'');$('apodo').value=p?p.apodo||'':'';$('invitado').checked=p?p.tipo==='invitado':!!opts.invitado;$('dupAviso').hidden=true;
+  $('error').textContent='';$('zoom').value='1';$('vertical').value='0';$('horizontal').value='0';$('adjustments').hidden=true;$('remove').hidden=!p;
+  $('modalTitle').textContent=p?'Editar piloto':'Nuevo piloto';$('teamLabel').textContent=p?(p.slot!=null?'En la parrilla · lugar '+(p.slot+1):'Registro de pilotos'):(editSentar?'Entra a la parrilla al guardar':'Registro de pilotos');
+  $('overlay').style.setProperty('--team',editColor);$('overlay').hidden=false;document.body.classList.add('modal-open');$('save').disabled=false;drawAvatar();$('name').focus();
+  if(p&&p.avatar){$('save').disabled=true;try{const im=await loadImage(avatarSrc(p.avatar));if(job!==photoJob)return;existing=im;if(editFoto)preview();}catch(e){}finally{if(job===photoJob)$('save').disabled=false;}}
 }
-function closeEditor(){if(saving)return;slot=null;photo=null;existing=null;photoJob++;$('overlay').hidden=true;document.body.classList.remove('modal-open');if(previousFocus&&previousFocus.isConnected)previousFocus.focus();else $('add').focus();}
+function closeEditor(){if(saving)return;slot=null;photo=null;existing=null;editPid=null;editInfo=null;photoJob++;$('overlay').hidden=true;document.body.classList.remove('modal-open');if(previousFocus&&previousFocus.isConnected)previousFocus.focus();else $('add').focus();}
+async function regPost(body){const r=await fetch('/api/pilotos',{method:'POST',headers:{'Content-Type':'application/json','X-Roster':'1'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok){const e=Error(d.error||'No se pudo guardar.');e.status=r.status;e.data=d;throw e;}if(window.PeluPilotos)PeluPilotos.set(d);return d;}
 async function mutate(action){
-  if(saving)return;if(action==='save'&&!existing&&!photo){$('error').textContent='Toma una selfie o elige una foto del rostro.';return;}
-  saving=true;$('save').disabled=true;$('remove').disabled=true;$('error').textContent='';
-  try{const body={slot,expectedRevision:expected,action};
-    if(action==='save'){body.name=$('name').value.trim();body.nivel=editNivel;if(photoChanged){drawAvatar();body.image=canvas.toDataURL('image/png');}}
-    const response=await fetch('/api/slot',{method:'POST',headers:{'Content-Type':'application/json','X-Roster':'1'},body:JSON.stringify(body)});const result=await response.json();if(!response.ok)throw Error(result.error||'No se pudo guardar.');
-    saving=false;closeEditor();await poll();notify(action==='remove'?'Piloto eliminado. Lugar disponible.':'Piloto guardado. Ya se ve en la parrilla.');
+  if(saving)return;saving=true;$('save').disabled=true;$('remove').disabled=true;$('error').textContent='';
+  try{
+    if(action==='remove'){await regPost({action:'borrar',id:editPid});saving=false;closeEditor();await poll();notify('Piloto borrado del registro.');return;}
+    const body={action:'guardar',id:editPid||undefined,name:$('name').value.trim(),apodo:$('apodo').value.trim(),nivel:editNivel,tipo:$('invitado').checked?'invitado':'regular',color:editColor,coche:$('cocheHab').value};
+    if(!body.name)throw Error('Escribe el nombre del piloto.');
+    if(photoChanged){drawAvatar();body.image=canvas.toDataURL('image/png');body.foto=true;}
+    else if(!editFoto){drawAvatar();body.image=canvas.toDataURL('image/png');body.foto=false;}   // sin foto: casco con sus iniciales
+    let d;
+    try{d=await regPost(body);}
+    catch(e){
+      const dup=e.data&&e.data.duplicado;if(!dup)throw e;
+      if(editPid){
+        if(!confirm('Ya hay un piloto «'+dup.name+'» en el registro.\n\n¿Es la misma persona? Aceptar = UNIR los dos: se queda «'+dup.name+'» con el historial y tiempos de ambos.\nCancelar = cambia el nombre (ponle apellido o apodo).'))throw Error('Ese nombre ya existe. Ponle apellido o apodo, o únelos.');
+        d=await regPost({action:'unir',de:editPid,a:dup.id});
+      }else{
+        if(!confirm('Ya hay un piloto «'+dup.name+'» en el registro.\n\n¿Es la misma persona? Aceptar = usar «'+dup.name+'» (no se duplica).\nCancelar = cambia el nombre (ponle apellido o apodo).'))throw Error('Ese nombre ya existe. Ponle apellido o apodo.');
+        d={saved:dup.id};
+      }
+    }
+    let msg='Piloto guardado en el registro.';
+    if(editSentar&&d.saved){const p=PeluPilotos.get(d.saved);const r=await regPost({action:'sentar',id:d.saved,image:p&&!p.avatar?avatarIniciales(p.name,p.color):undefined});msg='Piloto guardado y en la parrilla.';if(typeof r.slot==='number'&&selectionInitialized)selectedPilots.add(r.slot);}
+    saving=false;closeEditor();await poll();notify(msg);
   }catch(e){$('error').textContent=e.message||'No hay conexión con la Mac. Intenta otra vez.';}
   finally{saving=false;$('save').disabled=false;$('remove').disabled=false;}
 }
 $('camera').addEventListener('change',choosePhoto);$('library').addEventListener('change',choosePhoto);
 ['zoom','vertical','horizontal'].forEach(id=>$(id).addEventListener('input',preview));
-$('name').addEventListener('input',()=>{if(photoChanged||!existing)preview();});
+$('name').addEventListener('input',()=>{if(photoChanged||!editFoto)preview();if(window.PeluPilotos)PeluPilotos.avisoDup($('name').value,editPid);});
 $('form').addEventListener('submit',e=>{e.preventDefault();mutate('save');});
-$('remove').addEventListener('click',()=>{if(confirm('¿Quitar a este piloto y su avatar de la parrilla?'))mutate('remove');});
+$('remove').addEventListener('click',()=>{const n=$('name').value.trim()||'este piloto';if(confirm('¿Borrar a «'+n+'» del registro?\n\nSe borran su historial y sus tiempos del ranking. No se puede deshacer.\nSi solo ya no viene, mejor usa «Archivar».'))mutate('remove');});
 $('close').addEventListener('click',closeEditor);$('cancel').addEventListener('click',closeEditor);
-$('add').addEventListener('click',()=>{if(!roster){notify('Espera la conexión con la Mac.');return;}const i=roster.slots.findIndex(p=>!p);if(i<0){notify('Máximo 6 competidores. Edita o quita uno para liberar un lugar.');return;}openEditor(i);});
+$('add').addEventListener('click',()=>{if(!roster){notify('Espera la conexión con la Mac.');return;}openPilot(null);});
 document.addEventListener('keydown',e=>{if($('overlay').hidden)return;if(e.key==='Escape')closeEditor();if(e.key==='Tab'){const nodes=[...$('form').querySelectorAll('button,input')].filter(n=>!n.disabled&&n.getClientRects().length&&!n.classList.contains('file'));const first=nodes[0],last=nodes[nodes.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});
 poll();setInterval(poll,1000);
 // 🏎️ Garage: coches en pista por mando (se refresca solo; al cambiar, se redibujan los selectores).
@@ -172,9 +194,9 @@ function showScreen(next){
   screen=next;screens.forEach(name=>$(name+'Screen').hidden=name!==next);
   if(next!=='session'&&window.PeluLights)PeluLights.hide();
   if(next!=='session'&&window.PeluParo)PeluParo.hide();
-  $('pageEyebrow').textContent=next==='roster'?'SLOTRACE / PILOTOS Y AVATARES':next==='session'&&activeSession?.type==='practice'?'SLOTRACE / SESIÓN LIBRE':(next==='session'||next==='lights')&&activeSession?.type==='race'?'SLOTRACE / CARRERA':'SLOTRACE / ELIGE TU RETO';
+  $('pageEyebrow').textContent=next==='roster'?'SLOTRACE / REGISTRO DE PILOTOS':next==='session'&&activeSession?.type==='practice'?'SLOTRACE / SESIÓN LIBRE':(next==='session'||next==='lights')&&activeSession?.type==='race'?'SLOTRACE / CARRERA':'SLOTRACE / ELIGE TU RETO';
   $('pageTitle').textContent=next==='session'&&activeSession?.type==='practice'?'Práctica':'Puto el último';
-  $('pageSubtitle').textContent=next==='roster'?'Seis lugares. Cada piloto con su propio estilo.':next==='session'&&activeSession?.type==='practice'?'Encuentra tu ritmo. Sin presión.':'Arma la parrilla. Escoge el modo. A correr.';
+  $('pageSubtitle').textContent=next==='roster'?'Todos tus pilotos: nivel, tiempos e historial.':next==='session'&&activeSession?.type==='practice'?'Encuentra tu ritmo. Sin presión.':'Arma la parrilla. Escoge el modo. A correr.';
   document.body.classList.remove('theme-trash','theme-beer','theme-practice');
   if(next==='session'&&activeSession)document.body.classList.add(activeSession.type==='practice'?'theme-practice':activeSession.mode==='chelas'?'theme-beer':'theme-trash');
   else if(next==='lights')document.body.classList.add((activeSession?.mode||selectedMode)==='chelas'?'theme-beer':'theme-trash');
@@ -194,7 +216,6 @@ function chooseSession(type){
   if(liveState?.session&&liveState.session.phase!=='ended'){dismissedSessionId=null;showLiveSession();notify('Hay una sesión en curso. Termínala antes de comenzar otra.');return;}
   if(!roster){notify('Espera la conexión con la Mac.');return;}
   sessionType=type;savePreference('pelu-session-type',type);
-  if(!roster.slots.some(Boolean)){showScreen('roster');notify('Primero agrega al menos un piloto con su foto. Después vuelve al menú.');return;}
   selectedPilots=new Set(roster.slots.flatMap((p,i)=>p?[i]:[]));selectionInitialized=true;$('selectionError').textContent='';renderParticipants();showScreen('choose');
 }
 function updateSelectionCount(){
@@ -206,7 +227,8 @@ function renderParticipants(){
   selectedPilots.forEach(i=>{if(!roster.slots[i])selectedPilots.delete(i);});
   $('selectionType').textContent=sessionType==='practice'?'PRÁCTICA / SESIÓN LIBRE':'CARRERA / '+MODES[selectedMode].title;
   $('selectionRule').textContent=sessionType==='practice'?'Sin castigos. Tiempos reales y mejor vuelta para encontrar tu ritmo.':MODES[selectedMode].rule;
-  const target=$('participantOptions');target.replaceChildren();
+  const target=$('participantOptions'),ae=document.activeElement;if(ae&&ae.id==='regQuickName'&&target.contains(ae))return;target.replaceChildren();
+  if(window.PeluPilotos)target.append(PeluPilotos.chips());
   roster.slots.forEach((p,i)=>{
     if(!p)return;const label=element('label','participant-option');label.style.setProperty('--team',roster.colors[i].hex);
     const input=element('input');input.type='checkbox';input.name='pilot';input.value=String(i);input.checked=selectedPilots.has(i);input.addEventListener('change',()=>{input.checked?selectedPilots.add(i):selectedPilots.delete(i);updateSelectionCount();$('selectionError').textContent='';});
@@ -224,8 +246,8 @@ function renderParticipants(){
   });
   // 🎲 Sortear mandos: a cada piloto seleccionado le toca un mando distinto al azar (su coche va con él).
   if(roster.slots.some(Boolean)){const bar=element('div','sortear-bar');const b=element('button','sortear-btn','🎲 Sortear mandos');b.type='button';b.id='sortearMandos';
-    b.addEventListener('click',()=>sortearMandos());bar.append(b,element('small','help','Entre los pilotos seleccionados. El coche de cada quien va con él, no con el mando.'));target.prepend(bar);}
-  if(!roster.slots.some(Boolean))target.append(element('p','help','No hay pilotos registrados. Agrega uno desde Administrar pilotos.'));
+    b.addEventListener('click',()=>sortearMandos());bar.append(b,element('small','help','Entre los pilotos seleccionados. El coche de cada quien va con él, no con el mando.'));target.querySelector('#regChips')?target.querySelector('#regChips').after(bar):target.prepend(bar);}
+  if(!roster.slots.some(Boolean))target.append(element('p','help','Nadie en la parrilla todavía. Toca arriba a los que van a correr, o «＋ Nuevo».'));
   updateSelectionCount();
 }
 function rosterNames(){const n={};(roster?.slots||[]).forEach((p,i)=>{if(p)n[String(i)]=p.name;});return n;}

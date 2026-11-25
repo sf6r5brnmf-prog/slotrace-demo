@@ -183,28 +183,30 @@ poll();setInterval(poll,1000);
 PeluGarage.onChange(()=>{renderLapConfig(true);if(screen==='choose')renderParticipants();});PeluGarage.start(5000);
 
 // El registro sigue en el servidor; solo las preferencias del menú son locales.
-const MODES={ultimo:{title:'Puto el último',rule:'el que quede último es el puto.',icon:'⚑'},chelas:{title:'El último paga las chelas',rule:'el último invita las chelas.',icon:'🍻'}};
+const MODES={carrera:{title:'Carrera',rule:'Gana la mejor vuelta. Sin castigos ni efectos.',icon:'▦'},ultimo:{title:'Puto el último',rule:'Ronda corta: al primer corte, el que vaya último es el Puto.',icon:'⚑'},chelas:{title:'El último paga las chelas',rule:'Rondas de 3 min: el último suma una chela a su cuenta.',icon:'🍻'}};
+// Nombre corto de la sesión (semáforo, PARO, tablero).
+function modeLabel(s){if(!s)return '';if(s.type==='practice')return 'PRÁCTICA';if(s.juego)return MODES[s.mode]?.title.toUpperCase()||'CARRERA';return 'CARRERA'+(s.mode&&s.mode!=='carrera'&&MODES[s.mode]?' · '+MODES[s.mode].title:'');}
 function readPreference(key,fallback){try{return localStorage.getItem(key)||fallback;}catch(e){return fallback;}}
 function savePreference(key,value){try{localStorage.setItem(key,value);}catch(e){}}
-let selectedMode=readPreference('pelu-mode','ultimo');if(!MODES[selectedMode])selectedMode='ultimo';
+let selectedMode='carrera';
 let sessionType='race',screen='home',selectedPilots=new Set(),activeSession=null,lightTimer=null,lightStep=0,selectionInitialized=false;
-const screens=['home','roster','choose','session'];
+const screens=['home','roster','choose','session','config'];
 function showScreen(next){
   if(lightTimer!==null){clearTimeout(lightTimer);lightTimer=null;}
-  screen=next;screens.forEach(name=>$(name+'Screen').hidden=name!==next);
+  screen=next;screens.forEach(name=>$(name+'Screen').hidden=name!==next);document.body.dataset.screen=next;{const m=$('sessionMore');if(m){m.hidden=true;$('sessionMoreBtn').setAttribute('aria-expanded','false');}}
   if(next!=='session'&&window.PeluLights)PeluLights.hide();
   if(next!=='session'&&window.PeluParo)PeluParo.hide();
   $('pageEyebrow').textContent=next==='roster'?'SLOTRACE / REGISTRO DE PILOTOS':next==='session'&&activeSession?.type==='practice'?'SLOTRACE / SESIÓN LIBRE':(next==='session'||next==='lights')&&activeSession?.type==='race'?'SLOTRACE / CARRERA':'SLOTRACE / ELIGE TU RETO';
-  $('pageTitle').textContent=next==='session'&&activeSession?.type==='practice'?'Práctica':'Puto el último';
-  $('pageSubtitle').textContent=next==='roster'?'Todos tus pilotos: nivel, tiempos e historial.':next==='session'&&activeSession?.type==='practice'?'Encuentra tu ritmo. Sin presión.':'Arma la parrilla. Escoge el modo. A correr.';
+  $('pageTitle').textContent=next==='session'&&activeSession?.type==='practice'?'Práctica':next==='config'?'Configuración':'Puto el último';
+  $('pageSubtitle').textContent=next==='config'?'Lo que casi no se mueve, en un solo lugar.':next==='roster'?'Todos tus pilotos: nivel, tiempos e historial.':next==='session'&&activeSession?.type==='practice'?'Encuentra tu ritmo. Sin presión.':'Arma la parrilla. Escoge el modo. A correr.';
   document.body.classList.remove('theme-trash','theme-beer','theme-practice');
-  if(next==='session'&&activeSession)document.body.classList.add(activeSession.type==='practice'?'theme-practice':activeSession.mode==='chelas'?'theme-beer':'theme-trash');
-  else if(next==='lights')document.body.classList.add((activeSession?.mode||selectedMode)==='chelas'?'theme-beer':'theme-trash');
+  const th=m=>m==='chelas'?'theme-beer':m==='ultimo'?'theme-trash':null;
+  if(next==='session'&&activeSession){const t=activeSession.type==='practice'?'theme-practice':th(activeSession.mode);if(t)document.body.classList.add(t);}
+  else if(next==='choose'&&sessionType==='race'){const t=th(selectedMode);if(t)document.body.classList.add(t);}
+  document.body.classList.toggle('juego-on',next==='session'&&!!activeSession?.juego);
   window.scrollTo(0,0);
 }
-function syncMode(){
-  document.querySelectorAll('input[name="gameMode"]').forEach(r=>{r.checked=r.value===selectedMode;r.closest('.mode-option').classList.toggle('selected',r.checked);});
-}
+function syncMode(){}
 function syncMenuRoster(){
   $('menuPilotCount').textContent=roster.slots.filter(Boolean).length+'/6';
   if(screen==='choose')renderParticipants();
@@ -212,21 +214,22 @@ function syncMenuRoster(){
   if(screen==='session')renderSession();
   renderLapConfig();
 }
-function chooseSession(type){
+function chooseSession(type,mode){
   if(liveState?.session&&liveState.session.phase!=='ended'){dismissedSessionId=null;showLiveSession();notify('Hay una sesión en curso. Termínala antes de comenzar otra.');return;}
   if(!roster){notify('Espera la conexión con la Mac.');return;}
-  sessionType=type;savePreference('pelu-session-type',type);
+  sessionType=type;selectedMode=type==='race'&&MODES[mode]?mode:'carrera';savePreference('pelu-session-type',type);
   selectedPilots=new Set(roster.slots.flatMap((p,i)=>p?[i]:[]));selectionInitialized=true;$('selectionError').textContent='';renderParticipants();showScreen('choose');
 }
 function updateSelectionCount(){
   $('selectionCount').textContent=selectedPilots.size+' piloto'+(selectedPilots.size===1?'':'s')+' seleccionado'+(selectedPilots.size===1?'':'s');
-  $('beginSession').textContent=sessionType==='practice'?'Entrar a práctica':'Entrar a la carrera';
+  $('beginSession').textContent=sessionType==='practice'?'Entrar a práctica':selectedMode==='ultimo'?'⚑ A la ronda':selectedMode==='chelas'?'🍻 A la ronda':'Entrar a la carrera';
 }
 function renderParticipants(){
   if(!selectionInitialized)return;
   selectedPilots.forEach(i=>{if(!roster.slots[i])selectedPilots.delete(i);});
-  $('selectionType').textContent=sessionType==='practice'?'PRÁCTICA / SESIÓN LIBRE':'CARRERA / '+MODES[selectedMode].title;
-  $('selectionRule').textContent=sessionType==='practice'?'Sin castigos. Tiempos reales y mejor vuelta para encontrar tu ritmo.':MODES[selectedMode].rule;
+  $('selectionType').textContent=sessionType==='practice'?'PRÁCTICA / SESIÓN LIBRE':selectedMode==='carrera'?'CARRERA / MEJOR VUELTA':MODES[selectedMode].title.toUpperCase();
+  $('selectionRule').textContent=sessionType==='practice'?'Sin castigos. Tiempos reales y mejor vuelta para encontrar tu ritmo.':MODES[selectedMode].rule;$('selectionRule').hidden=sessionType==='race'&&selectedMode!=='carrera';
+  if(window.PeluJuego)PeluJuego.reglas(sessionType==='race'?selectedMode:null);
   const target=$('participantOptions'),ae=document.activeElement;if(ae&&ae.id==='regQuickName'&&target.contains(ae))return;target.replaceChildren();
   if(window.PeluPilotos)target.append(PeluPilotos.chips());
   roster.slots.forEach((p,i)=>{
@@ -264,14 +267,15 @@ function startSession(){
   const ids=[...selectedPilots].filter(i=>roster.slots[i]);
   if(!ids.length){$('selectionError').textContent='Selecciona al menos un piloto para continuar.';return;}
   $('beginSession').disabled=true;
-  sendLive({action:'start',type:sessionType,mode:selectedMode,slots:ids}).then(data=>{dismissedSessionId=null;applyLive(data,true);}).catch(e=>{$('selectionError').textContent=e.message;}).finally(()=>$('beginSession').disabled=false);
+  const juego=sessionType==='race'&&(selectedMode==='ultimo'||selectedMode==='chelas');
+  sendLive(Object.assign({action:'start',type:sessionType,mode:sessionType==='race'?selectedMode:'carrera',slots:ids},juego?{juego:true}:{})).then(data=>{dismissedSessionId=null;applyLive(data,true);}).catch(e=>{$('selectionError').textContent=e.message;}).finally(()=>$('beginSession').disabled=false);
 }
 function renderSession(){
   if(!activeSession||!roster)return;
-  const s=activeSession,practice=s.type==='practice',mode=MODES[s.mode],ended=s.phase==='ended';
+  const s=activeSession,practice=s.type==='practice',mode=MODES[s.mode]||MODES.carrera,ended=s.phase==='ended';
   const scxMode=s.lap_source==='scx',scxOn=scxMode||s.lap_source==='both';
-  $('sessionTypeBadge').textContent=(practice?'PRÁCTICA':'CARRERA')+(ended?' · TERMINADA':scxMode?' · TARJETA SCX':s.lap_source==='both'?' · SCX + SENSOR IR':' · POR TURNOS');
-  $('sessionEyebrow').textContent=practice?'ENCUENTRA TU RITMO':'TIEMPOS REALES / MEJOR VUELTA';
+  $('sessionTypeBadge').textContent=(practice?'PRÁCTICA':s.juego?(s.mode==='chelas'?'🍻 CHELAS'+(s.juego.ronda?' · RONDA '+s.juego.ronda:''):'⚑ PUTO EL ÚLTIMO'):'CARRERA')+(ended?' · TERMINADA':scxMode?' · TARJETA SCX':s.lap_source==='both'?' · SCX + SENSOR IR':' · POR TURNOS');
+  $('sessionEyebrow').textContent=practice?'ENCUENTRA TU RITMO':s.juego?'SOLO IMPORTA NO SER EL ÚLTIMO':'TIEMPOS REALES / MEJOR VUELTA';
   $('sessionTitle').textContent=practice?'Práctica':mode.title;
   $('sessionRule').textContent=practice?'Calienta y disfruta la pista. Aquí no hay castigos.':mode.rule;
   $('sessionIcon').textContent=practice?'↗':mode.icon;
@@ -286,7 +290,7 @@ function renderSession(){
   const yellowFlag=s.red&&s.red_flag?.kind==='yellow';
   $('turnHint').textContent=s.red?(countdown?'Semáforo de reanudación: nadie acelera antes del verde. El tiempo sigue desde donde se quedó.':yellowFlag?'🟨 BANDERA AMARILLA (la pidió '+(s.red_flag.by_name||'un piloto')+'): carrera detenida. Las vueltas no cuentan hasta Reanudar en esta pantalla.':'🚩 BANDERA ROJA: carrera detenida. Las vueltas no cuentan hasta Reanudar.'):ended?'Resultados guardados en la Mac.':ready?'Aprieta Empezar para el semáforo de salida. Nada cuenta hasta el verde.':countdown?'¡Semáforo! Nadie arranca antes del verde.':scxMode?'Todos corren a la vez. La primera pasada de cada coche por la meta es la salida; las siguientes cuentan vuelta.':s.phase==='resetting'?'Preparando salida. Espera la confirmación antes de pasar el auto.':s.phase==='waiting_sensor'?'Esperando respuesta del sensor para confirmar la salida.':s.phase==='paused'?'Turno en pausa. Elige al piloto para continuar con una salida nueva.':'Un auto a la vez. Primer paso = salida; los siguientes cuentan vueltas.';
   $('liveNotice').textContent=s.notice||'';
-  $('activeForm').hidden=ended||scxMode;$('endSession').hidden=ended;
+  $('activeForm').hidden=ended||scxMode;$('endSession').hidden=ended;$('liveControls').hidden=scxMode&&!s.red;
   const controlKey=s.id+':'+s.control;
   if(activeControlKey!==controlKey){
     activeControlKey=controlKey;const select=$('activePilot');select.replaceChildren();
@@ -304,12 +308,14 @@ function renderSession(){
   const dsqs=s.pilots.filter(p=>p.dsq),flagCfg=Object.assign({enabled:true,max:4},s.bandera_cfg||{});
   const timed=s.pilots.filter(p=>p.laps.length&&!p.dsq),worst=timed.length?Math.max(...timed.map(best)):null;
   const worstCount=dsqs.length||timed.filter(p=>best(p)===worst).length;
-  const pilots=s.pilots.slice().sort((a,b)=>(!!a.dsq-!!b.dsq)||(best(a)??Infinity)-(best(b)??Infinity)||a.slot-b.slot);
+  // ⚑/🍻: el orden y «el último» los pone el juego (vueltas netas y tiempo total con castigos), no la mejor vuelta.
+  const jt=s.juego?new Map(s.juego.tabla.map(r=>[r.slot,r])):null,jlast=s.juego&&s.juego.tabla.length>1?s.juego.tabla[s.juego.tabla.length-1].slot:null;
+  const pilots=jt?s.pilots.slice().sort((a,b)=>(jt.get(a.slot)?.pos||9)-(jt.get(b.slot)?.pos||9)):s.pilots.slice().sort((a,b)=>(!!a.dsq-!!b.dsq)||(best(a)??Infinity)-(best(b)??Infinity)||a.slot-b.slot);
   const board=$('sessionBoard'),dash=dashConfig(),scx=liveState?.scx;
   if(board.dataset.sessionId!==s.id){board.replaceChildren();sessionGauges.clear();board.dataset.sessionId=s.id;}
   board.classList.toggle('few',pilots.length<=4);
   pilots.forEach((p,index)=>{
-    const team=roster.colors[p.slot],last=p.laps[p.laps.length-1],fast=best(p),rank=last&&!p.dsq?1+timed.filter(other=>best(other)<fast).length:null,isLast=!practice&&(dsqs.length?!!p.dsq:last&&fast===worst);
+    const team=roster.colors[p.slot],last=p.laps[p.laps.length-1],fast=best(p),rank=jt?(p.dsq?null:jt.get(p.slot)?.pos):last&&!p.dsq?1+timed.filter(other=>best(other)<fast).length:null,isLast=jt?p.slot===jlast:!practice&&(dsqs.length?!!p.dsq:last&&fast===worst);
     let card=board.querySelector('[data-slot="'+p.slot+'"]');
     if(card&&card.dataset.hon!==String(hon)){card.remove();card=null;sessionGauges.delete(p.slot);}
     if(card&&(!sessionGauges.has(p.slot)||!['.gpos','.gname small.car-badge','.gname .pide','.gname .gflags','.track-badge','.last-badge','.dsq-badge','.pit-badge','.gcanvas','[data-stat="0"]','[data-stat="1"]','[data-stat="2"]','[data-kmh="1"]','[data-kmh="2"]','.gsus','.gpits','.gtire','details','summary','tbody'].every(selector=>card.querySelector(selector)))){card.remove();card=null;sessionGauges.delete(p.slot);}
@@ -339,7 +345,7 @@ function renderSession(){
     const car=carFor(p.slot),sub=card.querySelector('.gname small'),subText=(scxOn?'Coche '+car+' · '+team.name:'Equipo '+team.name)+(p.coche_nombre?' · 🏎️ '+p.coche_nombre:'');if(sub.textContent!==subText)sub.textContent=subText;
     card.querySelector('.track-badge').hidden=p.slot!==s.active||ended;
     const loser=card.querySelector('.last-badge');loser.hidden=!isLast;
-    const loserText=(s.mode==='chelas'?'Invita las chelas':'El último')+(worstCount>1?' · empate':'');if(loser.textContent!==loserText)loser.textContent=loserText;
+    const loserText=(s.mode==='chelas'?'Invita las chelas':'El último')+(!jt&&worstCount>1?' · empate':'');if(loser.textContent!==loserText)loser.textContent=loserText;
     // Agujas: la Pit Box no da velocidad instantánea; la aguja se queda en la velocidad a escala de la última vuelta.
     const kmh=last&&Number.isFinite(Number(last.escala))?Number(last.escala):null;
     const rawFuel=scx?.connected?scx.fuel?.[car-1]:null,fuel=dash.fuel_enabled&&Number.isFinite(rawFuel)?rawFuel:null;
@@ -375,6 +381,8 @@ function renderSession(){
   $('sessionTotal').textContent=s.pilots.reduce((total,p)=>total+p.laps.length,0)+' vueltas registradas'+(scxMode?' · tarjeta SCX':' · 40 por turno');
   const hcText=hon?' · con handicap (H = mejor vuelta + ajuste: '+s.handicap.resumen+')':'';
   $('sessionInfoRule').textContent=(scxMode?'Clasificación por mejor vuelta · todos a la vez con la Pit Box.':'Clasificación por mejor vuelta · carreras por turnos.')+hcText;$('sessionNote').textContent=scxMode?'Solo tienen posición los pilotos con vueltas completadas. La tarjeta SCX reconoce cada coche por su número de mando.':'Solo tienen posición los pilotos con vueltas completadas. Un solo sensor: elige al piloto antes de que corra.';
+  $('sessionInfoRule').textContent=s.juego?'Orden del juego: más vueltas (ya con castigos) y luego menos tiempo total.'+hcText:$('sessionInfoRule').textContent;
+  if(window.PeluJuego)PeluJuego.render(s);else{$('juegoBoard').hidden=true;$('corteBanner').hidden=true;}
 }
 // Bandera amarilla del piloto: «🟨 2/4» en su tarjeta; «DSQ» si ya lo descalificaron. Vacío si la función está apagada y no usó ninguna.
 function flagsText(used,dsq,cfg){if(dsq)return '⛔ DSQ';if(!cfg.enabled&&!used)return '';return '🟨 '+(used||0)+'/'+cfg.max;}
@@ -404,12 +412,15 @@ function suspiciousTitle(list){
   const src={scx:'Pit Box',ir:'sensor IR','scx-sim':'simulada'};
   return (list||[]).slice(-20).reverse().map(x=>Number(x.s).toFixed(2)+' s · '+(x.hora?new Date(x.hora*1000).toLocaleTimeString('es-MX'):'')+' · '+(src[x.src]||x.src||'')+(x.car?' · coche '+x.car:'')).join('\n');
 }
-document.querySelectorAll('input[name="gameMode"]').forEach(r=>r.addEventListener('change',()=>{if(r.checked){selectedMode=r.value;savePreference('pelu-mode',selectedMode);syncMode();}}));
+$('ultimoAction').addEventListener('click',()=>chooseSession('race','ultimo'));
+$('chelasAction').addEventListener('click',()=>chooseSession('race','chelas'));
+$('showConfig').addEventListener('click',()=>showScreen('config'));
+$('sessionMoreBtn').addEventListener('click',()=>{const m=$('sessionMore'),open=m.hidden;m.hidden=!open;$('sessionMoreBtn').setAttribute('aria-expanded',open?'true':'false');});
 document.querySelectorAll('.back-menu').forEach(b=>b.addEventListener('click',()=>{dismissedSessionId=liveState?.session?.id||null;showScreen('home');}));
 $('showPilots').addEventListener('click',()=>showScreen('roster'));
 $('managePilots').addEventListener('click',()=>showScreen('roster'));
 $('practiceAction').addEventListener('click',()=>chooseSession('practice'));
-$('raceAction').addEventListener('click',()=>chooseSession('race'));
+$('raceAction').addEventListener('click',()=>chooseSession('race','carrera'));
 $('participantsForm').addEventListener('submit',e=>{e.preventDefault();startSession();});
 syncMode();showScreen('home');
 
@@ -458,7 +469,7 @@ function renderSessionLights(s){
   if(!s||screen!=='session'){PeluLights.hide();return;}
   if(s.phase==='countdown'){
     const total=(s.countdown_total||dashConfig().lights_seconds||3)*1000;
-    PeluLights.render('countdown',s.countdown_ms,total,s.type==='practice'?'PRÁCTICA':'CARRERA · '+MODES[s.mode].title);
+    PeluLights.render('countdown',s.countdown_ms,total,modeLabel(s));
     const key=s.id+':'+s.starts_at;
     if(lightsSoundKey!==key){lightsSoundKey=key;if(s.countdown_ms>300){const lead=PeluLights.soundLead(s.countdown_ms);if(lead>=0)setTimeout(()=>playSfx('semaforo'),lead*1000);else playSfx('semaforo',-lead);}}
   }else PeluLights.render(s.phase);
@@ -468,7 +479,7 @@ function renderSessionLights(s){
 function renderParo(s){
   if(!window.PeluParo)return;
   if(!s||screen!=='session'){PeluParo.hide();return;}
-  const label=s.type==='practice'?'PRÁCTICA':'CARRERA · '+MODES[s.mode].title;
+  const label=modeLabel(s);
   const rf=s.red_flag||{};
   PeluParo.render({canStop:(s.phase==='running'&&!s.simulated)||s.phase==='countdown',red:!!s.red,resuming:!!s.red&&s.phase==='countdown',frozenMs:s.elapsed_ms,label,n:rf.n,
     kind:rf.kind||'red',by:rf.by_name||null,used:rf.used??null,max:rf.max??null});
@@ -602,7 +613,9 @@ function applyLapConfig(config){
 }
 function renderLapConfig(force=false){
   if(!lapConfig||!roster)return;
-  const target=$('carAssign'),source=$('lapSource');if(!target||!source)return;
+  const source=$('lapSource');if(!source)return;
+  // La asignación de mando y coche ya no vive en el menú: se hace en «¿Quiénes corren?» (renderParticipants).
+  const target=$('carAssign')||(renderLapConfig.box||(renderLapConfig.box=document.createElement('div')));
   const sig=lapConfigSignature+'|'+roster.version;
   if(!force&&target.dataset.sig===sig)return;
   if(target.contains(document.activeElement)&&!force)return;
@@ -676,7 +689,8 @@ function playSfx(name,offset=0){
   const a=SESSION_SFX[name];if(!a)return;try{a.pause();a.currentTime=offset>0?offset:0;}catch(e){}a.volume=v;a.play().catch(()=>{});
 }
 function unlockSfx(){Object.values(SESSION_SFX).forEach(a=>{a.muted=true;a.play().then(()=>{a.pause();a.currentTime=0;a.muted=false;}).catch(()=>{a.muted=false;});});}
-function syncSfxButton(){const b=$('soundToggle');if(!b)return;const on=sfxDevice&&sfxUnlocked;b.textContent=on?'🔊 Sonido en este equipo':'🔇 Activar sonido aquí';b.classList.toggle('on',on);}
+function syncSfxButton(){const b=$('soundToggle');if(!b)return;const on=sfxDevice&&sfxUnlocked;b.textContent=on?'🔊 Sonido en este equipo':'🔇 Activar sonido aquí';b.classList.toggle('on',on);const q=$('soundQuick');if(q){q.textContent=on?'🔊':'🔇';q.classList.toggle('on',on);q.title=q.ariaLabel=on?'Sonido activado en este equipo (toca para apagar)':'Activar sonido en este equipo';q.setAttribute('aria-label',q.title);}}
+{const q=$('soundQuick');if(q)q.addEventListener('click',()=>$('soundToggle').click());}
 $('soundToggle').addEventListener('click',()=>{
   if(sfxDevice&&sfxUnlocked)sfxDevice=false;else{sfxDevice=true;sfxUnlocked=true;unlockSfx();}
   try{localStorage.setItem('gp-sound',sfxDevice?'on':'off');}catch(e){}syncSfxButton();

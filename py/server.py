@@ -7,6 +7,7 @@ from urllib.parse import urlsplit, parse_qs
 from live import Live, LiveError
 from scx import SCX, LapConfig
 from esp32usb import Esp32Usb, OFF_VALUES as USB_OFF
+import juego as juego_mod
 from gp import GrandPrix, GPError, DEFAULTS as GP_DEFAULTS, flag_config as gp_flag_config
 import durable
 from instancia import InstanceLock
@@ -86,6 +87,7 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:return self.reply(400,{'error':'desde debe ser un número'})
             return self.reply(200,self.server.scx.eventos(desde))
         if path=='/api/vueltas-config':return self.reply(200,self.server.lap_config.read())
+        if path=='/api/juego':return self.reply(200,self.server.juego.vista())
         if path=='/api/diagnostics':return self.reply(200,self.server.live.diagnostics())
         if path in ['/api/live','/api/session']:
             revisar_garage(self.server)
@@ -181,7 +183,7 @@ class Handler(BaseHTTPRequestHandler):
         self.reply(404,{'error':'No se encontró esa página.'})
     def _post(self):
         route=urlsplit(self.path).path
-        if route not in ['/api/slot','/api/session','/api/gp','/api/gp/config','/api/sim','/api/vueltas-config','/api/scx/simular','/api/inscritos','/api/garage','/api/pilotos']: return self.reply(404,{'error':'Ruta desconocida.'})
+        if route not in ['/api/slot','/api/session','/api/gp','/api/gp/config','/api/sim','/api/vueltas-config','/api/scx/simular','/api/inscritos','/api/garage','/api/pilotos','/api/juego']: return self.reply(404,{'error':'Ruta desconocida.'})
         # Un sitio externo no puede escribir con un formulario o fetch sin CORS.
         origin=self.headers.get('Origin')
         if self.headers.get('X-Roster')!='1' or (origin and urlsplit(origin).netloc!=self.headers.get('Host')):
@@ -213,6 +215,17 @@ class Handler(BaseHTTPRequestHandler):
                     payload['nombres']={str(i):(x or {}).get('name') or 'Piloto %d'%(i+1) for i,x in enumerate(sl)}
                 try:return self.reply(200,self.server.garage.command(payload))
                 except garage_mod.GarageError as e:return self.reply(e.status,{'error':str(e)})
+            if route=='/api/juego':
+                # ⚑/🍻 Modos de juego: configuración, «la siguiente ronda vale doble» y «Cerrar la noche».
+                try:
+                    a=payload.get('action');st=self.server.juego
+                    if a=='config':return self.reply(200,st.set_config(payload))
+                    if a=='doble':return self.reply(200,st.doble_siguiente(bool(payload.get('on'))))
+                    if a=='cerrar_noche':
+                        if _ocupado_juego(self.server):return self.reply(409,{'error':'Hay una ronda en curso. Termínala antes de cerrar la noche.'})
+                        n=st.cerrar_noche();v=st.vista();v['cerrada']=n;return self.reply(200,v)
+                    return self.reply(400,{'error':'Acción desconocida.'})
+                except juego_mod.JuegoError as e:return self.reply(e.status,{'error':str(e)})
             if route=='/api/vueltas-config':
                 return self.reply(200,self.server.lap_config.write(payload))
             if route=='/api/scx/simular':
@@ -609,6 +622,17 @@ def gp_busy(gp):
     run=gp.current()
     return bool(run and run['phase'] in ('countdown','running','finishing','red'))
 
+def _ocupado_juego(server):
+    live=server.live
+    with live.lock:s=live.session;return bool(s and s.get('juego') and s.get('phase')!='ended')
+def live_sim_phase(live,lap_config):
+    """Simulador: (fase, coches) de la Práctica/Carrera. En el semáforo de una ronda de juego también (salida en falso de prueba)."""
+    with live.lock:
+        s=live.session
+        if s and s.get('juego') and s['phase']=='countdown' and not s.get('red_flag') and s.get('lap_source') in ('scx','both'):
+            slots=[p['slot'] for p in s['pilots']];cars=lap_config.read()['cars'];return 'countdown',[cars[i]-1 for i in slots]
+    cars=live_sim_cars(live,lap_config)
+    return ('running',cars) if cars else (None,[])
 def live_sim_cars(live,lap_config):
     """Simulador: coches de la Práctica/Carrera en curso que cuenta la tarjeta SCX (0 a 5)."""
     with live.lock:
@@ -644,6 +668,9 @@ def wire(server):
         g=server.garage.read();q=garage_mod.faltan(g,g.get('uso'),ids,{str(i):(roster['slots'][i] or {}).get('name') for i in ids})
         return garage_mod.aviso_faltan(q) if q else None
     live.falta_coche=falta_coche
+    # ⚑/🍻 Modos de juego: configuración y cuentas (data/juego.json); salida en falso con el mismo umbral del GP.
+    live.juego_store=server.juego
+    live.falso_throttle=lambda:gp.config.get('false_start_throttle',GP_DEFAULTS.get('false_start_throttle',2))
     # Bandera amarilla del piloto: triple clic del botón de cambio de carril (la tarjeta SCX solo se escucha).
     # Una sola configuración (Gran Premio → Configuración) para GP, Práctica y Carrera.
     flag_cfg=lambda:gp_flag_config(gp.gp['config'] if gp.gp and gp.gp.get('status')=='active' else gp.config)
@@ -663,8 +690,8 @@ def wire(server):
         def follow():
             phase,cars=gp.sim_follow()
             if phase in ('countdown','running','finishing'):return phase,cars
-            cars=live_sim_cars(live,server.lap_config)
-            return ('running',cars) if cars else (phase,[])
+            ph,cars=live_sim_phase(live,server.lap_config)
+            return (ph,cars) if cars else (phase,[])
         scx.sim.follow=follow
 
 def build_server(host,port,data,esp32_url,scx_port=None,scx_baud=57600,simulate=False,avisos=None,esp32_usb='auto',min_lap_s=None):
@@ -697,6 +724,8 @@ def build_server(host,port,data,esp32_url,scx_port=None,scx_baud=57600,simulate=
         server.niveles_hechos=[str(k) for k in (nh or {}).get('hechos',[])][-200:]
         # 👥 Registro de pilotos: nace con todos los pilotos que ya había (parrilla, torneo y ranking). Nada se borra.
         server.registro=pilotos_mod.Registro(Path(data),server.avisos)
+        # ⚑ Puto el último / 🍻 Las chelas: configuración, veces Puto y cuenta de la noche (data/juego.json).
+        server.juego=juego_mod.JuegoStore(Path(data),server.avisos)
         d=server.store.read()
         if server.registro.migrar(d['slots'],server.inscritos.read()['pilotos'],server.ranking.nombres()):d['version']+=1;server.store.write(d)
         # ESP32 del sensor por cable USB (solo lectura, solo para la 💥 explosión al instante). Nunca la tarjeta SCX.

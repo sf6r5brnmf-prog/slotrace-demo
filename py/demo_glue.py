@@ -169,6 +169,7 @@ def _live_step(self):
                     self.session.update(phase='waiting_sensor', version=self.session['version'] + 1, notice='Comprobando conexión del sensor. La salida se preparará al recuperar respuesta.'); self.save()
         if current and prepare and d: self.reset_turn(token, d)
         with self.lock: self._next_poll = time.monotonic() + self.poll_interval()
+    if hasattr(self, 'juego_tick'): self.juego_tick()
     self.flush()
 
 def _sensor_running():

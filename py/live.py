@@ -3,6 +3,7 @@ import collections,copy,csv,io,json,math,os,threading,time,uuid,shutil
 import durable
 import pits as pits_mod
 import handicap as handicap_mod
+import juego as juego_mod
 from pathlib import Path
 from urllib.request import Request,build_opener,ProxyHandler
 
@@ -44,6 +45,7 @@ class Live:
         # scx: el MISMO lector SCX del Gran Premio (solo lectura). gp_busy(): True si una parte del GP está corriendo.
         # track(): (metros de la pista, escala) del Gran Premio para calcular km/h igual en todos lados.
         self.scx=None;self.lap_config=lap_config;self.scx_marks={};self.gp_busy=None;self.track=None
+        self.juego_store=None;self.falso_throttle=None   # ⚑/🍻 modos de juego (juego.py): server.wire los conecta
         self.flag_config=None   # server.wire: configuración de la bandera amarilla del piloto (la del Gran Premio)
         self.directory=Path(directory);self.path=self.directory/'session.json';self.base_url=base_url.rstrip('/')
         self.lock=threading.RLock();self.stop_event=threading.Event();self.wake=threading.Event();self.opener=build_opener(ProxyHandler({}))
@@ -196,7 +198,8 @@ class Live:
                 s['elapsed_ms']=self.elapsed_ms(s)
                 s['red']=bool(s.get('red_flag'))
                 s['min_lap_s']=self.min_lap_s()
-                s['bandera_cfg']=self.flag_cfg()
+                s['bandera_cfg']=self.flag_cfg_de(self.session)
+                if s.get('juego'):s['juego']=juego_mod.vista(self,self.session)
                 for p in s['pilots']:
                     p['pits']=self.pits_view(p)
                 # Handicap (ajuste de tiempo por vuelta): clase y segundos de cada piloto según su coche.
@@ -465,6 +468,7 @@ class Live:
     def standings(s,hs=None):
         """[(posición o None, piloto)] por mejor vuelta (con handicap si hs={lugar: segundos}); los descalificados al final y sin posición."""
         hs=hs or {}
+        if s.get('juego'):return juego_mod.posiciones(s,hs)   # ⚑/🍻: el orden del juego (vueltas netas y tiempo)
         best=lambda p:handicap_mod.mas(min((l['s'] for l in p['laps']),default=None),hs.get(p['slot'],0.0))
         ps=sorted(s['pilots'],key=lambda p:(bool(p.get('dsq')),best(p) is None,best(p) or 0,p['slot']))
         return [(i+1 if not p.get('dsq') and best(p) is not None else None,p) for i,p in enumerate(ps)]
@@ -475,6 +479,12 @@ class Live:
             try:cfg.update(fn() or {})
             except Exception:pass
         return cfg
+    def flag_cfg_de(self,s):
+        cfg=self.flag_cfg()
+        j=(s or {}).get('juego') if isinstance(s,dict) else None
+        if j:
+            n=int(j['cfg'].get('banderas',2));cfg=dict(cfg,max=n,enabled=bool(cfg.get('enabled')) and n>0)
+        return cfg
     def on_pilot_flag(self,car,t=None):
         """Triple clic del mando car (1..6) en Práctica/Carrera. Devuelve 'yellow', 'dsq' o None (ignorado)."""
         busy=getattr(self,'gp_busy',None)
@@ -482,6 +492,7 @@ class Live:
         cfg=self.flag_cfg()
         with self.lock:
             s=self.session
+            cfg=self.flag_cfg_de(s)
             # Solo con la sesión en verde. Antes del semáforo, sin sesión, durante un PARO (o su semáforo) o en una prueba simulada: nada.
             if not cfg['enabled'] or not s or s['phase']!='running' or s.get('red_flag') or s.get('simulated'):return None
             config=getattr(self,'lap_config',None)
@@ -639,6 +650,11 @@ class Live:
                 rf=s['red_flag'];lap=rf.setdefault('lap_elapsed',{})
                 if str(ev['car']) in lap and lap[str(ev['car'])]!=0:lap[str(ev['car'])]=0;rf['ignored']=rf.get('ignored',0)+1;self.save()
                 return
+            if s and s.get('juego') and s['phase']=='countdown' and not s.get('red_flag') and s.get('lap_source') in ['scx','both']:
+                # ⚑/🍻: cruzar la meta durante el semáforo = salida en falso (castigo en la tabla).
+                config=getattr(self,'lap_config',None);sl=config.slot_for_car(ev['car']) if config is not None else ev['car']-1
+                if juego_mod.falso(self,s,sl,'cruzó la meta antes del verde'):self.save()
+                return
             if not s or s.get('lap_source') not in ['scx','both'] or s['phase'] in ['ready','countdown','ended'] or s.get('simulated'):return
             config=getattr(self,'lap_config',None)
             slot=config.slot_for_car(ev['car']) if config is not None else ev['car']-1
@@ -661,9 +677,12 @@ class Live:
                 if len(pilot['laps'])>=self.SCX_MAX_LAPS:
                     s.update(version=s['version']+1,notice='Máximo '+str(self.SCX_MAX_LAPS)+' vueltas por piloto en esta sesión.');self.save();return
                 kmh,escala=self.speed(seconds)
+                if s.get('juego') and not juego_mod.antes_vuelta(self,s,pilot):
+                    self.save();return   # 🍻 ya terminó su última vuelta de la ronda: esta pasada no cuenta
                 pilot['laps'].append(dict(n=len(pilot['laps'])+1,s=seconds,kmh=kmh,escala=escala,source_n=None,turn='scx',car=ev['car'],src='scx-sim' if ev.get('simulado') else 'scx'))
                 s.update(version=s['version']+1,notice='')
                 self.calibrate_trigger(ev['car'],seconds,escala,ev['t_ms']/1000.0)
+                if s.get('juego'):juego_mod.despues_vuelta(self,s,pilot)
             self.save()
         self.wake.set()
     def complete_reset(self,token):
@@ -710,7 +729,9 @@ class Live:
             if action=='start':
                 if self.session and self.session['phase']!='ended':raise LiveError('Ya hay una sesión en curso. Ábrela o termínala antes de crear otra.',409)
                 typ=payload.get('type');mode=payload.get('mode');ids=payload.get('slots')
-                if typ not in ['race','practice'] or mode not in ['ultimo','chelas']:raise LiveError('Elige Carrera o Práctica y un modo válido.')
+                if typ not in ['race','practice'] or mode not in ['ultimo','chelas','carrera']:raise LiveError('Elige Carrera o Práctica y un modo válido.')
+                es_juego=bool(payload.get('juego'))
+                if es_juego and (typ!='race' or mode not in juego_mod.MODOS):raise LiveError('Modo de juego inválido.')
                 if not isinstance(ids,list) or not 1<=len(ids)<=6 or any(type(i)!=int or i<0 or i>5 for i in ids) or len(set(ids))!=len(ids):raise LiveError('Selecciona de uno a seis pilotos.')
                 if any(not roster['slots'][i] for i in ids):raise LiveError('Un piloto ya no está registrado. Vuelve a elegir participantes.',409)
                 # 🏎️ Cada piloto que corre lleva un coche del Garage (casa o invitados): de ahí salen su clase y su hándicap.
@@ -721,14 +742,21 @@ class Live:
                 pilots=[]
                 for i in ids:
                     source=self.directory/roster['slots'][i]['avatar'].lstrip('/');avatar='/avatars/'+uuid.uuid4().hex+'.png';shutil.copyfile(source,self.directory/avatar.lstrip('/'))
-                    pilots.append(dict(slot=i,name=roster['slots'][i]['name'],avatar=avatar,laps=[],nivel=handicap_mod.nivel_ok(roster['slots'][i].get('nivel'))))
+                    pilots.append(dict(slot=i,name=roster['slots'][i]['name'],avatar=avatar,laps=[],nivel=handicap_mod.nivel_ok(roster['slots'][i].get('nivel')),pid=roster['slots'][i].get('pid')))
                 source=self.resolve_source()
+                if es_juego and source not in ('scx','both'):
+                    raise LiveError('Puto el último y El último paga las chelas necesitan la Pit Box (tarjeta SCX) para que todos corran a la vez. Conéctala o cambia «Contar vueltas con» en Configuración.',409)
                 # Práctica y Carrera empiezan en "listos": se ve el tablero y el botón Empezar. Nada cuenta (ni se
                 # reinicia la ESP32) hasta que alguien aprieta Empezar y el semáforo llega a verde.
                 g=getattr(getattr(self,'scx',None),'gatillo',None)
                 if g is not None:g.reset_session()   # «pide cambio»: los apretones se cuentan por sesión
                 self.session={'id':uuid.uuid4().hex,'created_at':time.time(),'type':typ,'mode':mode,'lap_source':source,'phase':'ready','starts_at':0,'active':None,'pending_active':ids[0] if len(ids)==1 else None,'control':1,'version':1,'cursor':0,'turn':uuid.uuid4().hex,'notice':READY_NOTICE,'reset_reason':'start','pilots':pilots,'handicap':self.current_handicap()}
                 if source=='scx':self.session.update(pending_active=None)
+                if es_juego:
+                    st=self.juego_store;cfg=(st.config() if st is not None else juego_mod.DEFAULTS)[mode]
+                    noche=st.noche() if (st is not None and mode=='chelas') else None
+                    self.session['juego']=juego_mod.nuevo(mode,cfg,pilots,doble=bool(noche and noche.get('doble_siguiente')),ronda=(len(noche['rondas'])+1) if noche else (1 if mode=='chelas' else None))
+                    if source=='both':self.session.update(pending_active=None)
                 self.save()
             elif action=='go':
                 # Botón Empezar: semáforo de salida. Repetirlo (otro dispositivo, doble clic, carrera ya en verde) no hace nada.
@@ -804,9 +832,9 @@ class Live:
                 if not s or s['id']!=payload.get('id') or s['phase']=='ended':raise LiveError('La sesión cambió. Actualiza la pantalla.',409)
                 if payload.get('control')!=s['control']:raise LiveError('Otro dispositivo cambió el turno. Vuelve a intentarlo.',409)
                 if action=='end':
-                    self.red_close(s,False)
-                    self.close_open_pits(s,'cierre')
-                    s.update(phase='ended',ended_at=time.time(),starts_at=0,control=s['control']+1,version=s['version']+1,notice='Sesión terminada. Resultados guardados.');self.save()
+                    j=s.get('juego')
+                    if j and j['fase']!='fin':j['fase']='fin';j['resultado']=None;j['bomba']=None;j['cancelada']=True
+                    self.terminar_sesion(s,'Sesión terminada. Resultados guardados.' if not j else 'Ronda terminada a mano: sin Puto ni chelas esta vez.')
                 else:
                     if s.get('red_flag'):raise LiveError('Hay bandera roja. Aprieta Reanudar antes de cambiar de piloto.',409)
                     if s.get('lap_source')=='scx':raise LiveError('Con la tarjeta SCX todos corren a la vez; no hace falta elegir quién está en pista.')
@@ -822,6 +850,15 @@ class Live:
             else:raise LiveError('Acción de sesión desconocida.')
             self.wake.set()
             return self.snapshot(False)
+    def terminar_sesion(self,s,notice):
+        self.red_close(s,False)
+        self.close_open_pits(s,'cierre')
+        s.update(phase='ended',ended_at=time.time(),starts_at=0,control=s['control']+1,version=s['version']+1,notice=notice);self.save()
+    def juego_tick(self):
+        """⚑/🍻: salida en falso durante el semáforo, bombas, cortes y fin de ronda (también entre cruces)."""
+        with self.lock:
+            s=self.session
+            if s and s.get('juego') and s['phase'] in ('countdown','running'):juego_mod.tick(self,s)
     def loop(self):
         next_poll=0
         while not self.stop_event.is_set():
@@ -848,6 +885,7 @@ class Live:
                                 self.session.update(phase='waiting_sensor',version=self.session['version']+1,notice='Comprobando conexión del sensor. La salida se preparará al recuperar respuesta.');self.save()
                     if current and prepare and d:self.reset_turn(token,d)
                     with self.lock:next_poll=time.monotonic()+self.poll_interval()
+                self.juego_tick()
                 self.flush()
                 wait_s=min(.2,next_poll-time.monotonic())
                 with self.lock:

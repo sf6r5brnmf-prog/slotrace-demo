@@ -1,12 +1,12 @@
 'use strict';
 // Contenedor de la DEMO: arranca el servidor real (Python) dentro del navegador y muestra la app real en un iframe.
 (function(){
-const V='202611242220';
+const V='202611251205';
 // Tus datos viven en IndexedDB «/slotrace». Hasta la versión 202611241610 vivían en «/data»: las pestañas VIEJAS que sigan
 // abiertas en el teléfono todavía escriben ahí (y podían borrar coches). Ahora ya no pueden: esta versión solo LEE «/data»
 // una vez para traerse tus datos, y nunca escribe en ella.
 const D='/slotrace',OLD='/data';
-const PY=['durable.py','instancia.py','handicap.py','garage.py','ranking.py','pilotos.py','torneo.py','pits.py','gatillo.py','scx.py','live.py','gp.py','micoche.py','esp32usb.py','server.py','demo_glue.py'];
+const PY=['durable.py','instancia.py','handicap.py','garage.py','ranking.py','pilotos.py','torneo.py','pits.py','gatillo.py','scx.py','juego.py','live.py','gp.py','micoche.py','esp32usb.py','server.py','demo_glue.py'];
 const NAMES=['Ernesto','Pepe','Lalo','Mica'];
 const PAGES=['index.html','gp.html','micoche.html','scx.html','garage.html','ranking.html'];
 const COLORS=[['Blanco','#edf2f7'],['Amarillo','#ffe23b'],['Rojo','#ff4d50'],['Azul','#3d96ff'],['Verde','#50dc92'],['Naranja','#ff963d']];

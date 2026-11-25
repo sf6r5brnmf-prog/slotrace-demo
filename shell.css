@@ -32,3 +32,15 @@ html,body{margin:0;height:100%;background:#0b0d11;color:#f5f7fa;font-family:syst
 .stale-box{max-width:460px;border:1px solid #2a313c;border-top:6px solid #ffb02e;border-radius:16px;padding:22px;background:#151a21;color:#f2f5f8;font:16px/1.5 system-ui}
 .stale-box h2{margin:0 0 10px;font-size:22px}
 .stale-box button{margin-top:14px;font:800 17px system-ui;padding:12px 18px;border-radius:12px;border:0;background:#d7ff3a;color:#111;width:100%}
+
+/* ♻️ Respaldos */
+.resc-box{max-width:520px;max-height:86vh;overflow:auto;text-align:left}
+.resc-lista{list-style:none;padding:0;margin:12px 0;display:grid;gap:8px}
+.resc-lista li{display:grid;grid-template-columns:1fr auto;gap:6px 10px;align-items:center;padding:10px;border:1px solid #303743;border-radius:10px;background:#11151b}
+.resc-lista li.mejor{border-color:#d5ff42}
+.resc-lista b{font-size:15px}.resc-lista small{grid-column:1/-1;color:#aab4c2;font-size:12px;line-height:1.4}
+.resc-lista button{background:#d5ff42;color:#11150b;border:0;border-radius:9px;padding:9px 12px;font:800 14px system-ui}
+.resc-acc{display:flex;justify-content:flex-end;gap:8px}
+.bloqueo{position:fixed;left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));z-index:60;background:#3a1416;color:#ffd7d4;border:1px solid #ff8179;border-radius:12px;padding:12px;font:600 14px/1.4 system-ui}
+.bloqueo button{margin-left:6px;background:#ff8179;color:#1a0b0b;border:0;border-radius:8px;padding:7px 12px;font:800 14px system-ui}
+.dm-file{display:inline-flex;align-items:center;cursor:pointer}

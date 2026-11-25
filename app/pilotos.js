@@ -179,9 +179,10 @@ function chips(){
       if(dup){if(!confirm('Ya hay un «'+dup.name+'» en el registro'+(dup.archivado?' (archivado)':'')+'. ¿Es la misma persona?\n\nAceptar = meter a «'+dup.name+'» a la parrilla (no se duplica).\nCancelar = escribe otro nombre o apellido.'))return;
         if(dup.archivado)await accion(dup,'archivar',{valor:false});quickOpen=false;await sentar(get(dup.id)||dup);return;}
       if(sentados().length>=6){m.textContent='La parrilla ya tiene 6. Saca a alguien primero.';return;}
+      quickOpen=false;i.blur();   // cerrar ya el formulario: si se redibuja a medio guardar no debe volver a abrirse ni robar el teclado
       try{const col=colorLibre();const d=await post({action:'guardar',name,tipo:x.checked?'invitado':'regular',color:col,image:window.avatarIniciales(name,col),foto:false});
-        quickOpen=false;const p=get(d.saved);await sentar(p);}catch(er){m.textContent=er.message;}});
-    box.append(f);setTimeout(()=>i.focus(),0);}
+        const p=get(d.saved);await sentar(p);}catch(er){err(er);if(typeof renderParticipants==='function')renderParticipants();}});
+    box.append(f);setTimeout(()=>{if(quickOpen&&i.isConnected)i.focus();},0);}
   return box;
 }
 

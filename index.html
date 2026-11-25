@@ -5,7 +5,7 @@
 <meta name="apple-mobile-web-app-title" content="Puto el último"><meta name="theme-color" content="#0b0d11"><meta name="format-detection" content="telephone=no">
 <link rel="icon" href="app/micoche-icon.png"><link rel="apple-touch-icon" href="app/micoche-icon.png">
 <title>Puto el último · SLOTRACE (DEMO)</title>
-<link rel="stylesheet" href="shell.css?v=202611241610">
+<link rel="stylesheet" href="shell.css?v=202611242220">
 </head><body>
 <div id="staleTab" class="stale-tab" hidden role="alertdialog" aria-labelledby="staleT"><div class="stale-box"><h2 id="staleT">La demo se abrió en otra pestaña</h2><p>Para no borrar tus datos (pilotos, coches del Garage, carreras), esta pestaña ya no guarda nada. Usa la pestaña nueva o toca el botón para seguir aquí con los datos al día.</p><button type="button" id="staleReload">Usar esta pestaña</button></div></div><div id="boot" class="boot"><div class="boot-box">
   <p class="eyebrow">SLOTRACE · CADA VUELTA CUENTA</p><h1>Puto el último</h1>
@@ -13,6 +13,8 @@
   <p class="boot-note">Versión DEMO: pista, Pit Box y sensor simulados. La primera vez tarda unos segundos en cargar.</p>
   <p class="boot-err" id="bootErr" hidden></p>
 </div></div>
+<div id="rescate" class="stale-tab" hidden role="dialog" aria-labelledby="rescT"><div class="stale-box resc-box"><h2 id="rescT">♻️ Recuperar coches y pilotos</h2><p id="rescMsg"></p><ol id="rescLista" class="resc-lista"></ol><div class="resc-acc"><button type="button" id="rescCerrar">Cerrar</button></div></div></div>
+<div id="bloqueo" class="bloqueo" hidden role="alert"><b>⚠️ No guardé este cambio para no borrar tus datos.</b> <span id="bloqueoMsg"></span> <button type="button" id="bloqueoRecargar">Recargar</button></div>
 <iframe id="app" title="Puto el último" hidden></iframe>
 <button type="button" id="demoChip" class="demo-chip" hidden aria-haspopup="dialog">DEMO</button>
 <div id="demoMenu" class="demo-menu" hidden role="dialog" aria-label="Opciones de la demo">
@@ -28,9 +30,11 @@
     <div class="dm-actions"><button type="button" id="dmFalse">⚠ Salida en falso en el próximo semáforo</button></div>
     <h3>Datos</h3>
     <div class="dm-actions"><a class="dm-link" href="carrera-rapida.html">🏁 Demo rápida (solo carrera)</a><button type="button" id="dmReset" class="dm-danger">↺ Restablecer demo</button></div>
+    <div class="dm-actions"><button type="button" id="dmRecuperar">♻️ Recuperar coches (respaldos)</button><button type="button" id="dmExportar">⬇️ Exportar respaldo</button><label class="dm-file" for="dmImportar">⬆️ Importar respaldo</label><input type="file" id="dmImportar" accept="application/json,.json" hidden></div>
+    <p class="dm-note">La demo guarda sola un respaldo cada vez que cambian tus coches o pilotos (los últimos 10). Con «Exportar» te llevas una copia en un archivo (Archivos / iCloud).</p>
     <p class="dm-msg" id="dmMsg" role="status"></p>
   </div>
 </div>
 <script src="pyodide/pyodide.js"></script>
-<script src="shell.js?v=202611241610"></script>
+<script src="shell.js?v=202611242220"></script>
 </body></html>
